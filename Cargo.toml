@@ -1,0 +1,37 @@
+[package]
+name = "boltr"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85.0"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/GrafeoDB/boltr"
+description = "Pure-Rust Bolt v5.x wire protocol library"
+keywords = ["bolt", "neo4j", "graph-database", "protocol"]
+categories = ["database", "network-programming"]
+
+[dependencies]
+async-trait = "0.1"
+bytes = "1"
+thiserror = "2"
+tokio = { version = "1", features = ["net", "io-util", "rt", "sync", "time", "macros"] }
+tracing = "0.1"
+uuid = { version = "1", features = ["v4"] }
+
+[features]
+default = []
+tls = ["dep:tokio-rustls", "dep:rustls-pemfile"]
+client = []
+
+[dependencies.tokio-rustls]
+version = "0.26"
+optional = true
+
+[dependencies.rustls-pemfile]
+version = "2"
+optional = true
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }
+
+[lints.clippy]
+needless_for_each = "allow"
