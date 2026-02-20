@@ -2,12 +2,14 @@
 name = "boltr"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.85.0"
+rust-version = "1.91.0"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/GrafeoDB/boltr"
 description = "Pure-Rust Bolt v5.x wire protocol library"
+readme = "README.md"
 keywords = ["bolt", "neo4j", "graph-database", "protocol"]
 categories = ["database", "network-programming"]
+exclude = [".claude/", ".github/", "target/"]
 
 [dependencies]
 async-trait = "0.1"
