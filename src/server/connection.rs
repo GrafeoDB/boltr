@@ -165,6 +165,12 @@ where
             ClientMessage::Begin { ref extra } => self.handle_begin(extra).await,
             ClientMessage::Commit => self.handle_commit().await,
             ClientMessage::Rollback => self.handle_rollback().await,
+            ClientMessage::Route {
+                ref routing,
+                ref bookmarks,
+                ref extra,
+            } => self.handle_route(routing, bookmarks, extra).await,
+            ClientMessage::Telemetry { .. } => self.handle_telemetry().await,
         }
     }
 
@@ -194,7 +200,8 @@ where
         let hints = BoltDict::new();
         metadata.insert("hints".into(), BoltValue::Dict(hints));
 
-        self.send_message(&ServerMessage::Success { metadata }).await?;
+        self.send_message(&ServerMessage::Success { metadata })
+            .await?;
         self.state = self.state.transition_success(&ClientMessage::Hello {
             extra: BoltDict::new(),
         });
@@ -209,7 +216,10 @@ where
                     .and_then(|v| v.as_str())
                     .unwrap_or("none")
                     .to_string(),
-                principal: auth.get("principal").and_then(|v| v.as_str()).map(String::from),
+                principal: auth
+                    .get("principal")
+                    .and_then(|v| v.as_str())
+                    .map(String::from),
                 credentials: auth
                     .get("credentials")
                     .and_then(|v| v.as_str())
@@ -403,7 +413,8 @@ where
 
         let metadata = self.backend.commit(session, &tx).await?;
 
-        self.send_message(&ServerMessage::Success { metadata }).await?;
+        self.send_message(&ServerMessage::Success { metadata })
+            .await?;
         self.state = self.state.transition_success(&ClientMessage::Commit);
         Ok(())
     }
@@ -425,6 +436,65 @@ where
         })
         .await?;
         self.state = self.state.transition_success(&ClientMessage::Rollback);
+        Ok(())
+    }
+
+    async fn handle_route(
+        &mut self,
+        routing: &BoltDict,
+        bookmarks: &[String],
+        extra: &BoltDict,
+    ) -> Result<(), BoltError> {
+        let db = extra.get("db").and_then(|v| v.as_str());
+
+        let table = self.backend.route(routing, bookmarks, db).await?;
+
+        let servers: Vec<BoltValue> = table
+            .servers
+            .iter()
+            .map(|s| {
+                BoltValue::Dict(BoltDict::from([
+                    (
+                        "addresses".into(),
+                        BoltValue::List(
+                            s.addresses
+                                .iter()
+                                .map(|a| BoltValue::String(a.clone()))
+                                .collect(),
+                        ),
+                    ),
+                    ("role".into(), BoltValue::String(s.role.clone())),
+                ]))
+            })
+            .collect();
+
+        let rt = BoltDict::from([
+            ("ttl".into(), BoltValue::Integer(table.ttl)),
+            ("db".into(), BoltValue::String(table.db)),
+            ("servers".into(), BoltValue::List(servers)),
+        ]);
+
+        let metadata = BoltDict::from([("rt".into(), BoltValue::Dict(rt))]);
+
+        self.send_message(&ServerMessage::Success { metadata })
+            .await?;
+        self.state = self.state.transition_success(&ClientMessage::Route {
+            routing: BoltDict::new(),
+            bookmarks: vec![],
+            extra: BoltDict::new(),
+        });
+        Ok(())
+    }
+
+    async fn handle_telemetry(&mut self) -> Result<(), BoltError> {
+        // Telemetry is a no-op acknowledgment (Bolt 5.4+).
+        self.send_message(&ServerMessage::Success {
+            metadata: BoltDict::new(),
+        })
+        .await?;
+        self.state = self
+            .state
+            .transition_success(&ClientMessage::Telemetry { api: 0 });
         Ok(())
     }
 

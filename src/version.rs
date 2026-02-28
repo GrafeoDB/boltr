@@ -33,9 +33,7 @@ pub fn negotiate_version(proposals: &[u8; 16]) -> Option<(u8, u8)> {
 
         // Check if any of our supported versions falls within the proposed range.
         for &(sup_major, sup_minor) in &SUPPORTED_VERSIONS {
-            if sup_major == major
-                && sup_minor <= minor
-                && sup_minor >= minor.saturating_sub(range)
+            if sup_major == major && sup_minor <= minor && sup_minor >= minor.saturating_sub(range)
             {
                 return Some((sup_major, sup_minor));
             }

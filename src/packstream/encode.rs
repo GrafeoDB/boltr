@@ -3,7 +3,7 @@
 use bytes::{BufMut, BytesMut};
 
 use super::marker;
-use crate::types::{tag, BoltValue};
+use crate::types::{BoltValue, tag};
 
 /// Encodes a `BoltValue` into the buffer using PackStream format.
 pub fn encode_value(buf: &mut BytesMut, value: &BoltValue) {
@@ -125,10 +125,7 @@ fn encode_list_header(buf: &mut BytesMut, len: usize) {
     }
 }
 
-pub fn encode_dict(
-    buf: &mut BytesMut,
-    dict: &std::collections::HashMap<String, BoltValue>,
-) {
+pub fn encode_dict(buf: &mut BytesMut, dict: &std::collections::HashMap<String, BoltValue>) {
     let len = dict.len();
     encode_dict_header(buf, len);
     for (key, value) in dict {
@@ -345,7 +342,13 @@ mod tests {
         let expected = 32768i32.to_be_bytes();
         assert_eq!(
             &buf[..],
-            &[marker::INT_32, expected[0], expected[1], expected[2], expected[3]]
+            &[
+                marker::INT_32,
+                expected[0],
+                expected[1],
+                expected[2],
+                expected[3]
+            ]
         );
     }
 
@@ -402,7 +405,11 @@ mod tests {
     #[test]
     fn encode_tiny_list() {
         let mut buf = BytesMut::new();
-        let items = vec![BoltValue::Integer(1), BoltValue::Integer(2), BoltValue::Integer(3)];
+        let items = vec![
+            BoltValue::Integer(1),
+            BoltValue::Integer(2),
+            BoltValue::Integer(3),
+        ];
         encode_list(&mut buf, &items);
         assert_eq!(&buf[..], &[0x93, 0x01, 0x02, 0x03]);
     }

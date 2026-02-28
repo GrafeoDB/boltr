@@ -5,9 +5,9 @@ use bytes::Buf;
 use super::marker;
 use crate::error::BoltError;
 use crate::types::{
-    tag, BoltDate, BoltDateTime, BoltDateTimeZoneId, BoltDict, BoltDuration, BoltLocalDateTime,
+    BoltDate, BoltDateTime, BoltDateTimeZoneId, BoltDict, BoltDuration, BoltLocalDateTime,
     BoltLocalTime, BoltNode, BoltPath, BoltPoint2D, BoltPoint3D, BoltRelationship, BoltTime,
-    BoltUnboundRelationship, BoltValue,
+    BoltUnboundRelationship, BoltValue, tag,
 };
 
 /// Decodes a single `BoltValue` from the buffer.
@@ -495,31 +495,62 @@ mod tests {
 
     #[test]
     fn round_trip_bool() {
-        assert_eq!(round_trip(&BoltValue::Boolean(true)), BoltValue::Boolean(true));
-        assert_eq!(round_trip(&BoltValue::Boolean(false)), BoltValue::Boolean(false));
+        assert_eq!(
+            round_trip(&BoltValue::Boolean(true)),
+            BoltValue::Boolean(true)
+        );
+        assert_eq!(
+            round_trip(&BoltValue::Boolean(false)),
+            BoltValue::Boolean(false)
+        );
     }
 
     #[test]
     fn round_trip_integers() {
         // TINY_INT boundaries
         for i in [-16, -1, 0, 1, 42, 127] {
-            assert_eq!(round_trip(&BoltValue::Integer(i)), BoltValue::Integer(i), "failed for {i}");
+            assert_eq!(
+                round_trip(&BoltValue::Integer(i)),
+                BoltValue::Integer(i),
+                "failed for {i}"
+            );
         }
         // INT_8
         for i in [-128, -17] {
-            assert_eq!(round_trip(&BoltValue::Integer(i)), BoltValue::Integer(i), "failed for {i}");
+            assert_eq!(
+                round_trip(&BoltValue::Integer(i)),
+                BoltValue::Integer(i),
+                "failed for {i}"
+            );
         }
         // INT_16
         for i in [-129, 128, -32768, 32767] {
-            assert_eq!(round_trip(&BoltValue::Integer(i)), BoltValue::Integer(i), "failed for {i}");
+            assert_eq!(
+                round_trip(&BoltValue::Integer(i)),
+                BoltValue::Integer(i),
+                "failed for {i}"
+            );
         }
         // INT_32
         for i in [-32769, 32768, i64::from(i32::MIN), i64::from(i32::MAX)] {
-            assert_eq!(round_trip(&BoltValue::Integer(i)), BoltValue::Integer(i), "failed for {i}");
+            assert_eq!(
+                round_trip(&BoltValue::Integer(i)),
+                BoltValue::Integer(i),
+                "failed for {i}"
+            );
         }
         // INT_64
-        for i in [i64::from(i32::MAX) + 1, i64::from(i32::MIN) - 1, i64::MAX, i64::MIN] {
-            assert_eq!(round_trip(&BoltValue::Integer(i)), BoltValue::Integer(i), "failed for {i}");
+        for i in [
+            i64::from(i32::MAX) + 1,
+            i64::from(i32::MIN) - 1,
+            i64::MAX,
+            i64::MIN,
+        ] {
+            assert_eq!(
+                round_trip(&BoltValue::Integer(i)),
+                BoltValue::Integer(i),
+                "failed for {i}"
+            );
         }
     }
 
@@ -579,12 +610,13 @@ mod tests {
         let node = BoltNode {
             id: 42,
             labels: vec!["Person".into()],
-            properties: BoltDict::from([
-                ("name".to_string(), BoltValue::String("Alice".into())),
-            ]),
+            properties: BoltDict::from([("name".to_string(), BoltValue::String("Alice".into()))]),
             element_id: "42".into(),
         };
-        assert_eq!(round_trip(&BoltValue::Node(node.clone())), BoltValue::Node(node));
+        assert_eq!(
+            round_trip(&BoltValue::Node(node.clone())),
+            BoltValue::Node(node)
+        );
     }
 
     #[test]

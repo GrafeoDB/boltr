@@ -2,7 +2,7 @@
 
 use bytes::Buf;
 
-use super::{sig, ClientMessage, ServerMessage};
+use super::{ClientMessage, ServerMessage, sig};
 use crate::error::BoltError;
 use crate::packstream::decode::decode_value;
 use crate::types::{BoltDict, BoltValue};
@@ -56,6 +56,32 @@ pub fn decode_client_message(data: &[u8]) -> Result<ClientMessage, BoltError> {
         }
         sig::COMMIT => Ok(ClientMessage::Commit),
         sig::ROLLBACK => Ok(ClientMessage::Rollback),
+        sig::ROUTE => {
+            expect_fields("ROUTE", field_count, 3)?;
+            let routing = require_dict(decode_value(&mut buf)?)?;
+            let bookmarks_val = require_list(decode_value(&mut buf)?)?;
+            let bookmarks = bookmarks_val
+                .into_iter()
+                .filter_map(|v| match v {
+                    BoltValue::String(s) => Some(s),
+                    _ => None,
+                })
+                .collect();
+            let extra = require_dict(decode_value(&mut buf)?)?;
+            Ok(ClientMessage::Route {
+                routing,
+                bookmarks,
+                extra,
+            })
+        }
+        sig::TELEMETRY => {
+            expect_fields("TELEMETRY", field_count, 1)?;
+            let api = match decode_value(&mut buf)? {
+                BoltValue::Integer(i) => i,
+                _ => 0,
+            };
+            Ok(ClientMessage::Telemetry { api })
+        }
         _ => Err(BoltError::Protocol(format!(
             "unknown client message tag: 0x{tag:02X}"
         ))),
@@ -154,9 +180,10 @@ mod tests {
     #[test]
     fn round_trip_hello() {
         let msg = ClientMessage::Hello {
-            extra: BoltDict::from([
-                ("user_agent".to_string(), BoltValue::String("test/1.0".into())),
-            ]),
+            extra: BoltDict::from([(
+                "user_agent".to_string(),
+                BoltValue::String("test/1.0".into()),
+            )]),
         };
         assert_eq!(round_trip_client(&msg), msg);
     }
@@ -167,7 +194,10 @@ mod tests {
             auth: BoltDict::from([
                 ("scheme".to_string(), BoltValue::String("basic".into())),
                 ("principal".to_string(), BoltValue::String("neo4j".into())),
-                ("credentials".to_string(), BoltValue::String("password".into())),
+                (
+                    "credentials".to_string(),
+                    BoltValue::String("password".into()),
+                ),
             ]),
         };
         assert_eq!(round_trip_client(&msg), msg);
@@ -178,9 +208,7 @@ mod tests {
         let msg = ClientMessage::Run {
             query: "RETURN 1".into(),
             parameters: BoltDict::new(),
-            extra: BoltDict::from([
-                ("db".to_string(), BoltValue::String("neo4j".into())),
-            ]),
+            extra: BoltDict::from([("db".to_string(), BoltValue::String("neo4j".into()))]),
         };
         assert_eq!(round_trip_client(&msg), msg);
     }
@@ -207,9 +235,10 @@ mod tests {
     #[test]
     fn round_trip_success() {
         let msg = ServerMessage::Success {
-            metadata: BoltDict::from([
-                ("server".to_string(), BoltValue::String("GrafeoDB/0.4.4".into())),
-            ]),
+            metadata: BoltDict::from([(
+                "server".to_string(),
+                BoltValue::String("GrafeoDB/0.4.4".into()),
+            )]),
         };
         assert_eq!(round_trip_server(&msg), msg);
     }
@@ -226,7 +255,10 @@ mod tests {
     fn round_trip_failure() {
         let msg = ServerMessage::Failure {
             metadata: BoltDict::from([
-                ("code".to_string(), BoltValue::String("Neo.ClientError.Statement.SyntaxError".into())),
+                (
+                    "code".to_string(),
+                    BoltValue::String("Neo.ClientError.Statement.SyntaxError".into()),
+                ),
                 ("message".to_string(), BoltValue::String("bad query".into())),
             ]),
         };
@@ -235,6 +267,28 @@ mod tests {
 
     #[test]
     fn round_trip_ignored() {
-        assert_eq!(round_trip_server(&ServerMessage::Ignored), ServerMessage::Ignored);
+        assert_eq!(
+            round_trip_server(&ServerMessage::Ignored),
+            ServerMessage::Ignored
+        );
+    }
+
+    #[test]
+    fn round_trip_route() {
+        let msg = ClientMessage::Route {
+            routing: BoltDict::from([(
+                "address".to_string(),
+                BoltValue::String("localhost:7687".into()),
+            )]),
+            bookmarks: vec!["bk:1".into(), "bk:2".into()],
+            extra: BoltDict::from([("db".to_string(), BoltValue::String("neo4j".into()))]),
+        };
+        assert_eq!(round_trip_client(&msg), msg);
+    }
+
+    #[test]
+    fn round_trip_telemetry() {
+        let msg = ClientMessage::Telemetry { api: 42 };
+        assert_eq!(round_trip_client(&msg), msg);
     }
 }

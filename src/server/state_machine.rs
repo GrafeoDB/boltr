@@ -28,14 +28,15 @@ impl ConnectionState {
     pub fn accepts(&self, msg: &ClientMessage) -> bool {
         match self {
             Self::Negotiation => matches!(msg, ClientMessage::Hello { .. }),
-            Self::Authentication => matches!(
-                msg,
-                ClientMessage::Logon { .. } | ClientMessage::Goodbye
-            ),
+            Self::Authentication => {
+                matches!(msg, ClientMessage::Logon { .. } | ClientMessage::Goodbye)
+            }
             Self::Ready => matches!(
                 msg,
                 ClientMessage::Run { .. }
                     | ClientMessage::Begin { .. }
+                    | ClientMessage::Route { .. }
+                    | ClientMessage::Telemetry { .. }
                     | ClientMessage::Reset
                     | ClientMessage::Goodbye
                     | ClientMessage::Logoff
@@ -62,10 +63,7 @@ impl ConnectionState {
                     | ClientMessage::Reset
                     | ClientMessage::Goodbye
             ),
-            Self::Failed => matches!(
-                msg,
-                ClientMessage::Reset | ClientMessage::Goodbye
-            ),
+            Self::Failed => matches!(msg, ClientMessage::Reset | ClientMessage::Goodbye),
             Self::Defunct => false,
         }
     }
@@ -130,10 +128,14 @@ mod tests {
     use crate::types::BoltDict;
 
     fn hello() -> ClientMessage {
-        ClientMessage::Hello { extra: BoltDict::new() }
+        ClientMessage::Hello {
+            extra: BoltDict::new(),
+        }
     }
     fn logon() -> ClientMessage {
-        ClientMessage::Logon { auth: BoltDict::new() }
+        ClientMessage::Logon {
+            auth: BoltDict::new(),
+        }
     }
     fn run() -> ClientMessage {
         ClientMessage::Run {
@@ -146,7 +148,9 @@ mod tests {
         ClientMessage::pull_all()
     }
     fn begin() -> ClientMessage {
-        ClientMessage::Begin { extra: BoltDict::new() }
+        ClientMessage::Begin {
+            extra: BoltDict::new(),
+        }
     }
 
     #[test]
@@ -178,7 +182,9 @@ mod tests {
     fn streaming_to_ready() {
         let s = ConnectionState::Streaming;
         assert!(s.accepts(&pull()));
-        assert!(s.accepts(&ClientMessage::Discard { extra: BoltDict::new() }));
+        assert!(s.accepts(&ClientMessage::Discard {
+            extra: BoltDict::new()
+        }));
         assert!(!s.accepts(&run()));
         assert_eq!(s.complete_streaming(), ConnectionState::Ready);
     }
@@ -217,6 +223,9 @@ mod tests {
     #[test]
     fn reset_from_failed() {
         let s = ConnectionState::Failed;
-        assert_eq!(s.transition_success(&ClientMessage::Reset), ConnectionState::Ready);
+        assert_eq!(
+            s.transition_success(&ClientMessage::Reset),
+            ConnectionState::Ready
+        );
     }
 }

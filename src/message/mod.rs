@@ -22,6 +22,8 @@ pub mod sig {
     pub const BEGIN: u8 = 0x11;
     pub const COMMIT: u8 = 0x12;
     pub const ROLLBACK: u8 = 0x13;
+    pub const ROUTE: u8 = 0x66;
+    pub const TELEMETRY: u8 = 0x54;
 
     // Server → Client
     pub const SUCCESS: u8 = 0x70;

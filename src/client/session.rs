@@ -49,10 +49,7 @@ impl BoltSession {
     }
 
     /// Runs a query and returns all results (auto-commit).
-    pub async fn run(
-        &mut self,
-        query: &str,
-    ) -> Result<QueryResult, BoltError> {
+    pub async fn run(&mut self, query: &str) -> Result<QueryResult, BoltError> {
         self.run_with_params(query, HashMap::new(), BoltDict::new())
             .await
     }

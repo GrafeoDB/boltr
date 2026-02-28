@@ -60,10 +60,7 @@ impl BoltConnection {
     }
 
     /// Sends HELLO and expects SUCCESS.
-    pub async fn hello(
-        &mut self,
-        extra: BoltDict,
-    ) -> Result<BoltDict, BoltError> {
+    pub async fn hello(&mut self, extra: BoltDict) -> Result<BoltDict, BoltError> {
         self.send(&ClientMessage::Hello { extra }).await?;
         match self.recv().await? {
             ServerMessage::Success { metadata } => Ok(metadata),
@@ -93,10 +90,7 @@ impl BoltConnection {
             auth.insert("principal".to_string(), BoltValue::String(p.to_string()));
         }
         if let Some(c) = credentials {
-            auth.insert(
-                "credentials".to_string(),
-                BoltValue::String(c.to_string()),
-            );
+            auth.insert("credentials".to_string(), BoltValue::String(c.to_string()));
         }
 
         self.send(&ClientMessage::Logon { auth }).await?;

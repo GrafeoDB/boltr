@@ -60,10 +60,55 @@ pub struct ResultStream {
     pub summary: BoltDict,
 }
 
+/// A server address with a role in the routing table.
+#[derive(Debug, Clone)]
+pub struct RoutingServer {
+    pub addresses: Vec<String>,
+    pub role: String,
+}
+
+/// Routing table returned by the ROUTE message handler.
+#[derive(Debug, Clone)]
+pub struct RoutingTable {
+    /// Time-to-live in seconds for the routing table.
+    pub ttl: i64,
+    /// Database name.
+    pub db: String,
+    /// Server entries with roles (WRITE, READ, ROUTE).
+    pub servers: Vec<RoutingServer>,
+}
+
+/// Extracts bookmarks from a Bolt extra dict.
+///
+/// Drivers send bookmarks as `{"bookmarks": ["bk:1", "bk:2"]}` in the
+/// extra field of BEGIN and RUN messages.
+pub fn extract_bookmarks(extra: &BoltDict) -> Vec<String> {
+    match extra.get("bookmarks") {
+        Some(BoltValue::List(list)) => list
+            .iter()
+            .filter_map(|v| match v {
+                BoltValue::String(s) => Some(s.clone()),
+                _ => None,
+            })
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
 /// The core backend trait that Bolt server implementations must provide.
 ///
 /// One session maps to one TCP connection. The connection handler calls
 /// these methods in response to Bolt messages.
+///
+/// # Bookmarks
+///
+/// Bookmarks enable causal consistency across transactions. Drivers send
+/// bookmarks in the `extra` dict of BEGIN and RUN messages (key: `"bookmarks"`,
+/// value: list of strings). Use [`extract_bookmarks`] to parse them.
+///
+/// After a successful COMMIT, the server should include `"bookmark"` in the
+/// returned metadata dict. The driver will use this bookmark in subsequent
+/// transactions to ensure causal ordering.
 #[async_trait::async_trait]
 pub trait BoltBackend: Send + Sync + 'static {
     // -- Session lifecycle --
@@ -123,4 +168,20 @@ pub trait BoltBackend: Send + Sync + 'static {
 
     /// Returns metadata to include in the HELLO SUCCESS response.
     async fn get_server_info(&self) -> Result<BoltDict, BoltError>;
+
+    // -- Routing --
+
+    /// Returns a routing table for cluster-aware drivers.
+    ///
+    /// The default implementation returns an error indicating that routing
+    /// is not supported. Single-server backends should override this to
+    /// return a table pointing to themselves.
+    async fn route(
+        &self,
+        _routing_context: &BoltDict,
+        _bookmarks: &[String],
+        _db: Option<&str>,
+    ) -> Result<RoutingTable, BoltError> {
+        Err(BoltError::Protocol("routing not supported".into()))
+    }
 }

@@ -2,7 +2,7 @@
 
 use bytes::BytesMut;
 
-use super::{sig, ClientMessage, ServerMessage};
+use super::{ClientMessage, ServerMessage, sig};
 use crate::packstream::encode as ps;
 use crate::types::BoltValue;
 
@@ -54,6 +54,24 @@ pub fn encode_client_message(buf: &mut BytesMut, msg: &ClientMessage) {
         ClientMessage::Rollback => {
             ps::encode_struct_header(buf, sig::ROLLBACK, 0);
         }
+        ClientMessage::Route {
+            routing,
+            bookmarks,
+            extra,
+        } => {
+            ps::encode_struct_header(buf, sig::ROUTE, 3);
+            ps::encode_dict(buf, routing);
+            let bm_values: Vec<BoltValue> = bookmarks
+                .iter()
+                .map(|s| BoltValue::String(s.clone()))
+                .collect();
+            ps::encode_list(buf, &bm_values);
+            ps::encode_dict(buf, extra);
+        }
+        ClientMessage::Telemetry { api } => {
+            ps::encode_struct_header(buf, sig::TELEMETRY, 1);
+            ps::encode_value(buf, &BoltValue::Integer(*api));
+        }
     }
 }
 
@@ -80,5 +98,10 @@ pub fn encode_server_message(buf: &mut BytesMut, msg: &ServerMessage) {
 
 /// Convenience: encode a server SUCCESS with the given key-value metadata.
 pub fn encode_success(buf: &mut BytesMut, metadata: &std::collections::HashMap<String, BoltValue>) {
-    encode_server_message(buf, &ServerMessage::Success { metadata: metadata.clone() });
+    encode_server_message(
+        buf,
+        &ServerMessage::Success {
+            metadata: metadata.clone(),
+        },
+    );
 }

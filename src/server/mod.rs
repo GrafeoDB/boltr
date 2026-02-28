@@ -11,8 +11,11 @@ pub mod state_machine;
 pub use auth::AuthValidator;
 pub use backend::{
     AccessMode, AuthCredentials, BoltBackend, BoltRecord, ResultMetadata, ResultStream,
-    SessionConfig, SessionHandle, SessionProperty, TransactionHandle,
+    RoutingServer, RoutingTable, SessionConfig, SessionHandle, SessionProperty, TransactionHandle,
+    extract_bookmarks,
 };
 pub use builder::BoltServer;
+#[cfg(feature = "tls")]
+pub use builder::TlsConfig;
 pub use session_manager::SessionManager;
 pub use state_machine::ConnectionState;

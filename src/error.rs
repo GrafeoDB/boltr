@@ -44,13 +44,15 @@ impl BoltError {
             Self::Protocol(m) => ("Neo.ClientError.Request.Invalid", m.clone()),
             Self::Authentication(m) => ("Neo.ClientError.Security.Unauthorized", m.clone()),
             Self::Session(m) => ("Neo.ClientError.Request.Invalid", m.clone()),
-            Self::Transaction(m) => {
-                ("Neo.ClientError.Transaction.TransactionStartFailed", m.clone())
-            }
+            Self::Transaction(m) => (
+                "Neo.ClientError.Transaction.TransactionStartFailed",
+                m.clone(),
+            ),
             Self::Query { code, message } => (code.as_str(), message.clone()),
-            Self::ResourceExhausted(m) => {
-                ("Neo.TransientError.General.MemoryPoolOutOfMemoryError", m.clone())
-            }
+            Self::ResourceExhausted(m) => (
+                "Neo.TransientError.General.MemoryPoolOutOfMemoryError",
+                m.clone(),
+            ),
             Self::Io(e) => (
                 "Neo.TransientError.General.DatabaseUnavailable",
                 e.to_string(),

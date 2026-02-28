@@ -41,6 +41,16 @@ pub enum ClientMessage {
 
     /// Roll back the current explicit transaction.
     Rollback,
+
+    /// Request routing table for cluster-aware drivers (Bolt 5.2+).
+    Route {
+        routing: BoltDict,
+        bookmarks: Vec<String>,
+        extra: BoltDict,
+    },
+
+    /// Client telemetry data (Bolt 5.4+). Server may safely ignore.
+    Telemetry { api: i64 },
 }
 
 impl ClientMessage {

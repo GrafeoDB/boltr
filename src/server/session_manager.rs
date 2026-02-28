@@ -31,18 +31,14 @@ impl SessionManager {
     }
 
     /// Registers a new session. Fails if the capacity limit is reached.
-    pub fn register(
-        &self,
-        handle: SessionHandle,
-        peer_addr: SocketAddr,
-    ) -> Result<(), BoltError> {
+    pub fn register(&self, handle: SessionHandle, peer_addr: SocketAddr) -> Result<(), BoltError> {
         let mut sessions = self.sessions.write().unwrap();
-        if let Some(limit) = self.max_sessions {
-            if sessions.len() >= limit {
-                return Err(BoltError::ResourceExhausted(format!(
-                    "max sessions ({limit}) reached"
-                )));
-            }
+        if let Some(limit) = self.max_sessions
+            && sessions.len() >= limit
+        {
+            return Err(BoltError::ResourceExhausted(format!(
+                "max sessions ({limit}) reached"
+            )));
         }
         let now = Instant::now();
         sessions.insert(
