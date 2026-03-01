@@ -206,10 +206,7 @@ impl BoltConnection {
     ///
     /// Returns records collected and the SUCCESS metadata. Check
     /// `metadata["has_more"]` to determine if more records remain.
-    pub async fn pull_n(
-        &mut self,
-        n: i64,
-    ) -> Result<(Vec<Vec<BoltValue>>, BoltDict), BoltError> {
+    pub async fn pull_n(&mut self, n: i64) -> Result<(Vec<Vec<BoltValue>>, BoltDict), BoltError> {
         self.send(&ClientMessage::pull_n(n)).await?;
 
         let mut records = Vec::new();
