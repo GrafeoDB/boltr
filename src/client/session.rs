@@ -1,4 +1,4 @@
-//! High-level Bolt session — connect, authenticate, run queries.
+//! High-level Bolt session: connect, authenticate, run queries.
 
 use std::collections::HashMap;
 use std::net::SocketAddr;

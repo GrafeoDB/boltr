@@ -1,4 +1,4 @@
-//! The `BoltBackend` trait — core abstraction for Bolt server implementations.
+//! The `BoltBackend` trait: core abstraction for Bolt server implementations.
 
 use std::collections::HashMap;
 

@@ -1,4 +1,4 @@
-//! Bolt client — connects to a Bolt server and runs queries.
+//! Bolt client: connects to a Bolt server and runs queries.
 //!
 //! Feature-gated behind `client`. Primarily intended for integration testing.
 

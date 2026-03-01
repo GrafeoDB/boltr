@@ -19,7 +19,7 @@ pub enum ConnectionState {
     TxStreaming,
     /// An error occurred; only RESET or GOODBYE accepted.
     Failed,
-    /// Terminal state — connection should be closed.
+    /// Terminal state, connection should be closed.
     Defunct,
 }
 
