@@ -556,7 +556,7 @@ mod tests {
 
     #[test]
     fn round_trip_float() {
-        let val = BoltValue::Float(3.14159);
+        let val = BoltValue::Float(std::f64::consts::PI);
         assert_eq!(round_trip(&val), val);
     }
 

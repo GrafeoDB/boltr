@@ -114,6 +114,25 @@ impl BoltConnection {
         self.send(&ClientMessage::Goodbye).await
     }
 
+    /// Sends LOGOFF and expects SUCCESS. The connection returns to the
+    /// authentication state and can be re-authenticated with a new `logon()`.
+    pub async fn logoff(&mut self) -> Result<(), BoltError> {
+        self.send(&ClientMessage::Logoff).await?;
+        match self.recv().await? {
+            ServerMessage::Success { .. } => Ok(()),
+            ServerMessage::Failure { metadata } => Err(BoltError::Authentication(
+                metadata
+                    .get("message")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("LOGOFF failed")
+                    .to_string(),
+            )),
+            other => Err(BoltError::Protocol(format!(
+                "expected SUCCESS after LOGOFF, got {other:?}"
+            ))),
+        }
+    }
+
     /// Sends RUN and expects SUCCESS with result metadata.
     pub async fn run(
         &mut self,
@@ -183,6 +202,71 @@ impl BoltConnection {
         }
     }
 
+    /// Sends PULL requesting `n` records and collects them until SUCCESS.
+    ///
+    /// Returns records collected and the SUCCESS metadata. Check
+    /// `metadata["has_more"]` to determine if more records remain.
+    pub async fn pull_n(
+        &mut self,
+        n: i64,
+    ) -> Result<(Vec<Vec<BoltValue>>, BoltDict), BoltError> {
+        self.send(&ClientMessage::pull_n(n)).await?;
+
+        let mut records = Vec::new();
+        loop {
+            match self.recv().await? {
+                ServerMessage::Record { data } => {
+                    records.push(data);
+                }
+                ServerMessage::Success { metadata } => {
+                    return Ok((records, metadata));
+                }
+                ServerMessage::Failure { metadata } => {
+                    return Err(BoltError::Query {
+                        code: metadata
+                            .get("code")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("unknown")
+                            .to_string(),
+                        message: metadata
+                            .get("message")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("pull failed")
+                            .to_string(),
+                    });
+                }
+                other => {
+                    return Err(BoltError::Protocol(format!(
+                        "unexpected message during PULL: {other:?}"
+                    )));
+                }
+            }
+        }
+    }
+
+    /// Sends DISCARD to skip all remaining records and expects SUCCESS.
+    pub async fn discard_all(&mut self) -> Result<(), BoltError> {
+        self.send(&ClientMessage::discard_all()).await?;
+        match self.recv().await? {
+            ServerMessage::Success { .. } => Ok(()),
+            ServerMessage::Failure { metadata } => Err(BoltError::Query {
+                code: metadata
+                    .get("code")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown")
+                    .to_string(),
+                message: metadata
+                    .get("message")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("discard failed")
+                    .to_string(),
+            }),
+            other => Err(BoltError::Protocol(format!(
+                "expected SUCCESS after DISCARD, got {other:?}"
+            ))),
+        }
+    }
+
     /// Sends BEGIN and expects SUCCESS.
     pub async fn begin(&mut self, extra: BoltDict) -> Result<(), BoltError> {
         self.send(&ClientMessage::Begin { extra }).await?;
@@ -220,10 +304,10 @@ impl BoltConnection {
     }
 
     /// Sends ROLLBACK and expects SUCCESS.
-    pub async fn rollback(&mut self) -> Result<(), BoltError> {
+    pub async fn rollback(&mut self) -> Result<BoltDict, BoltError> {
         self.send(&ClientMessage::Rollback).await?;
         match self.recv().await? {
-            ServerMessage::Success { .. } => Ok(()),
+            ServerMessage::Success { metadata } => Ok(metadata),
             ServerMessage::Failure { metadata } => Err(BoltError::Transaction(
                 metadata
                     .get("message")

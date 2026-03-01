@@ -93,15 +93,20 @@ impl BoltSession {
         self.conn.begin(BoltDict::new()).await
     }
 
-    /// Commits the current transaction.
-    pub async fn commit(&mut self) -> Result<(), BoltError> {
-        self.conn.commit().await?;
-        Ok(())
+    /// Commits the current transaction. Returns SUCCESS metadata
+    /// which may contain a `"bookmark"` for causal consistency.
+    pub async fn commit(&mut self) -> Result<BoltDict, BoltError> {
+        self.conn.commit().await
     }
 
     /// Rolls back the current transaction.
-    pub async fn rollback(&mut self) -> Result<(), BoltError> {
+    pub async fn rollback(&mut self) -> Result<BoltDict, BoltError> {
         self.conn.rollback().await
+    }
+
+    /// Discards all remaining records from the current result stream.
+    pub async fn discard(&mut self) -> Result<(), BoltError> {
+        self.conn.discard_all().await
     }
 
     /// Resets the connection to a clean state.
