@@ -180,7 +180,7 @@ impl<B: BoltBackend> BoltServer<B> {
                                     backend.clone(),
                                     session_manager.clone(),
                                     auth_validator.clone(),
-                                    tls_acceptor.clone(),
+                                    tls_acceptor,
                                 );
                             }
                             Err(e) => {
@@ -205,7 +205,7 @@ impl<B: BoltBackend> BoltServer<B> {
                             backend.clone(),
                             session_manager.clone(),
                             auth_validator.clone(),
-                            tls_acceptor.clone(),
+                            tls_acceptor,
                         );
                     }
                     Err(e) => {

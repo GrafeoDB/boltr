@@ -49,6 +49,8 @@
 //! - **`server`**, server framework with `BoltBackend` trait
 //! - **`client`**, client for connecting to Bolt servers (feature-gated)
 
+#![forbid(unsafe_code)]
+
 pub mod chunk;
 pub mod error;
 pub mod message;
