@@ -10,6 +10,28 @@ use super::connection::BoltConnection;
 
 /// A high-level Bolt session that handles connection, authentication,
 /// and provides a convenient query API.
+///
+/// ```rust,no_run
+/// # async fn example() -> Result<(), boltr::error::BoltError> {
+/// use boltr::client::BoltSession;
+///
+/// let addr = "127.0.0.1:7687".parse().unwrap();
+/// let mut session = BoltSession::connect(addr).await?;
+///
+/// // Auto-commit query
+/// let result = session.run("MATCH (n) RETURN n.name LIMIT 10").await?;
+/// println!("columns: {:?}", result.columns);
+/// println!("rows: {}", result.records.len());
+///
+/// // Explicit transaction
+/// session.begin().await?;
+/// session.run("CREATE (n:Test {val: 1})").await?;
+/// let bookmark = session.commit().await?;
+///
+/// session.close().await?;
+/// # Ok(())
+/// # }
+/// ```
 pub struct BoltSession {
     conn: BoltConnection,
 }

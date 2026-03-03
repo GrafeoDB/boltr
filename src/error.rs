@@ -34,11 +34,38 @@ pub enum BoltError {
 
 impl BoltError {
     /// Wraps any displayable error as a backend error.
+    ///
+    /// ```
+    /// use boltr::error::BoltError;
+    ///
+    /// let err = BoltError::backend("table not found");
+    /// assert_eq!(err.to_string(), "backend error: table not found");
+    /// ```
     pub fn backend(e: impl std::fmt::Display) -> Self {
         Self::Backend(e.to_string())
     }
 
     /// Converts this error into a Bolt FAILURE metadata dictionary.
+    ///
+    /// Returns a map with `"code"` and `"message"` keys matching the
+    /// Neo4j status code format.
+    ///
+    /// ```
+    /// use boltr::error::BoltError;
+    /// use boltr::types::BoltValue;
+    ///
+    /// let err = BoltError::Authentication("bad password".to_string());
+    /// let meta = err.to_failure_metadata();
+    ///
+    /// assert_eq!(
+    ///     meta.get("code"),
+    ///     Some(&BoltValue::String("Neo.ClientError.Security.Unauthorized".to_string()))
+    /// );
+    /// assert_eq!(
+    ///     meta.get("message"),
+    ///     Some(&BoltValue::String("bad password".to_string()))
+    /// );
+    /// ```
     pub fn to_failure_metadata(&self) -> HashMap<String, BoltValue> {
         let (code, message) = match self {
             Self::Protocol(m) => ("Neo.ClientError.Request.Invalid", m.clone()),

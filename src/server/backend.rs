@@ -82,6 +82,24 @@ pub struct RoutingTable {
 ///
 /// Drivers send bookmarks as `{"bookmarks": ["bk:1", "bk:2"]}` in the
 /// extra field of BEGIN and RUN messages.
+///
+/// ```
+/// use boltr::types::{BoltDict, BoltValue};
+/// use boltr::server::extract_bookmarks;
+///
+/// let extra = BoltDict::from([
+///     ("bookmarks".to_string(), BoltValue::List(vec![
+///         BoltValue::String("bk:tx-1".to_string()),
+///         BoltValue::String("bk:tx-2".to_string()),
+///     ])),
+/// ]);
+/// let bookmarks = extract_bookmarks(&extra);
+/// assert_eq!(bookmarks, vec!["bk:tx-1", "bk:tx-2"]);
+///
+/// // Returns empty vec when no bookmarks are present.
+/// let empty = extract_bookmarks(&BoltDict::new());
+/// assert!(empty.is_empty());
+/// ```
 pub fn extract_bookmarks(extra: &BoltDict) -> Vec<String> {
     match extra.get("bookmarks") {
         Some(BoltValue::List(list)) => list

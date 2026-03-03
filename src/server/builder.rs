@@ -55,6 +55,25 @@ impl TlsConfig {
 }
 
 /// Builder for configuring and starting a Bolt server.
+///
+/// ```rust,no_run
+/// use std::net::SocketAddr;
+/// use std::time::Duration;
+/// use boltr::server::BoltServer;
+/// # use boltr::server::BoltBackend;
+///
+/// # async fn example(my_backend: impl BoltBackend) -> Result<(), boltr::error::BoltError> {
+/// let addr: SocketAddr = "0.0.0.0:7687".parse().unwrap();
+///
+/// BoltServer::builder(my_backend)
+///     .idle_timeout(Duration::from_secs(300))
+///     .max_sessions(256)
+///     .shutdown(async { drop(tokio::signal::ctrl_c().await) })
+///     .serve(addr)
+///     .await?;
+/// # Ok(())
+/// # }
+/// ```
 pub struct BoltServer<B: BoltBackend> {
     backend: B,
     auth_validator: Option<Arc<dyn AuthValidator>>,
