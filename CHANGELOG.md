@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - 0.1.2
+
+### Fixed
+- **RUSTSEC-2025-0134**: replaced unmaintained `rustls-pemfile` with `rustls-pki-types` for TLS PEM parsing.
+- **Unbounded memory allocation**: capped PackStream list/dict pre-allocation to prevent OOM from malicious length declarations.
+- **PULL handler panic**: replaced `.unwrap()` with safe pattern match, reject invalid negative `n` values per Bolt spec.
+- **LOGOFF session leak**: LOGOFF now rolls back pending transactions and resets the backend session.
+- **Idle reaper desync**: connections detect when their session has been reaped and shut down cleanly.
+- **TLS accept loop**: fixed `tls_acceptor` moved-in-loop compile error when `tls` feature is enabled.
+
+### Added
+- `Display` implementations for `ConnectionState`, `ClientMessage`, and `ServerMessage`.
+- Crate root re-exports: `BoltError`, `BoltValue`, `BoltBackend`, `BoltServer`, `BoltSession`, and more.
+
+### Removed
+- Vestigial `needless_for_each` clippy lint allow from `Cargo.toml`.
+
 ## [0.1.1] - 2026-03-01
 
 ### Added
