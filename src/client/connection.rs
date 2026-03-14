@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 
 use bytes::BytesMut;
-use tokio::io::{ReadHalf, WriteHalf};
+use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpStream;
 
 use crate::chunk::reader::ChunkReader;
@@ -18,14 +18,17 @@ use crate::server::handshake::{client_handshake, default_client_proposals};
 use crate::types::{BoltDict, BoltValue};
 
 /// A low-level Bolt connection that handles handshake and message framing.
+///
+/// Internally uses trait objects so the same type works over TCP, TLS,
+/// and WebSocket transports.
 pub struct BoltConnection {
-    reader: ChunkReader<ReadHalf<TcpStream>>,
-    writer: ChunkWriter<WriteHalf<TcpStream>>,
+    reader: ChunkReader<Box<dyn AsyncRead + Unpin + Send>>,
+    writer: ChunkWriter<Box<dyn AsyncWrite + Unpin + Send>>,
     version: (u8, u8),
 }
 
 impl BoltConnection {
-    /// Connects to a Bolt server, performs the handshake, and returns
+    /// Connects to a Bolt server over TCP, performs the handshake, and returns
     /// a connection ready for HELLO/LOGON.
     pub async fn connect(addr: SocketAddr) -> Result<Self, BoltError> {
         let mut stream = TcpStream::connect(addr).await?;
@@ -35,8 +38,29 @@ impl BoltConnection {
 
         let (rh, wh) = tokio::io::split(stream);
         Ok(Self {
-            reader: ChunkReader::new(rh),
-            writer: ChunkWriter::new(wh),
+            reader: ChunkReader::new(Box::new(rh)),
+            writer: ChunkWriter::new(Box::new(wh)),
+            version,
+        })
+    }
+
+    /// Connects to a Bolt server over WebSocket, performs the handshake,
+    /// and returns a connection ready for HELLO/LOGON.
+    ///
+    /// Accepts `ws://` and `wss://` URLs. For `wss://`, TLS is handled
+    /// by the WebSocket library using platform-default root certificates.
+    #[cfg(feature = "ws")]
+    pub async fn connect_ws(url: &str) -> Result<Self, BoltError> {
+        let (ws_stream, _response) = tokio_tungstenite::connect_async(url).await?;
+        let mut adapted = crate::ws::WsStream::new(ws_stream);
+
+        let proposals = default_client_proposals();
+        let version = client_handshake(&mut adapted, &proposals).await?;
+
+        let (rh, wh) = tokio::io::split(adapted);
+        Ok(Self {
+            reader: ChunkReader::new(Box::new(rh)),
+            writer: ChunkWriter::new(Box::new(wh)),
             version,
         })
     }

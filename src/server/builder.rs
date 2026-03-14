@@ -233,6 +233,112 @@ impl<B: BoltBackend> BoltServer<B> {
         tracing::info!("Bolt server stopped");
         accept_result
     }
+
+    /// Starts the Bolt server, listening for WebSocket connections on `addr`.
+    ///
+    /// Each incoming TCP connection is upgraded to WebSocket via the HTTP
+    /// upgrade handshake, then the Bolt protocol runs over the WebSocket
+    /// connection.
+    ///
+    /// When the `tls` feature is also enabled, connections are TLS-wrapped
+    /// before the WebSocket upgrade (WSS).
+    #[cfg(feature = "ws")]
+    pub async fn ws_serve(self, addr: SocketAddr) -> Result<(), BoltError> {
+        let listener = TcpListener::bind(addr).await?;
+        let backend = Arc::new(self.backend);
+        let session_manager = Arc::new(SessionManager::new(self.max_sessions));
+        let auth_validator = self.auth_validator;
+
+        #[cfg(feature = "tls")]
+        let tls_acceptor = self.tls_config.map(|c| Arc::new(c.acceptor));
+        #[cfg(not(feature = "tls"))]
+        let tls_acceptor: Option<()> = None;
+
+        // Idle session reaper.
+        let reaper_handle = if let Some(timeout) = self.idle_timeout {
+            let sm = session_manager.clone();
+            let be = backend.clone();
+            let handle = tokio::spawn(async move {
+                let mut interval = tokio::time::interval(timeout / 2);
+                loop {
+                    interval.tick().await;
+                    let expired = sm.reap_idle(timeout);
+                    for id in &expired {
+                        let handle = crate::server::SessionHandle(id.clone());
+                        let _ = be.close_session(&handle).await;
+                        tracing::debug!(session_id = %id, "reaped idle Bolt session");
+                    }
+                }
+            });
+            Some(handle)
+        } else {
+            None
+        };
+
+        let tls_label = if tls_acceptor.is_some() { " (WSS)" } else { "" };
+        tracing::info!(%addr, "Bolt WebSocket server listening{}", tls_label);
+
+        // Accept loop.
+        let shutdown = self.shutdown;
+        let max_message_size = self.max_message_size;
+        let accept_result = if let Some(shutdown_signal) = shutdown {
+            tokio::pin!(shutdown_signal);
+            loop {
+                tokio::select! {
+                    result = listener.accept() => {
+                        match result {
+                            Ok((stream, peer_addr)) => {
+                                spawn_ws_connection(
+                                    stream,
+                                    peer_addr,
+                                    backend.clone(),
+                                    session_manager.clone(),
+                                    auth_validator.clone(),
+                                    tls_acceptor.clone(),
+                                    max_message_size,
+                                );
+                            }
+                            Err(e) => {
+                                tracing::warn!(error = %e, "accept error");
+                            }
+                        }
+                    }
+                    () = &mut shutdown_signal => {
+                        tracing::info!("Bolt WebSocket server shutting down");
+                        break;
+                    }
+                }
+            }
+            Ok(())
+        } else {
+            loop {
+                match listener.accept().await {
+                    Ok((stream, peer_addr)) => {
+                        spawn_ws_connection(
+                            stream,
+                            peer_addr,
+                            backend.clone(),
+                            session_manager.clone(),
+                            auth_validator.clone(),
+                            tls_acceptor.clone(),
+                            max_message_size,
+                        );
+                    }
+                    Err(e) => {
+                        tracing::warn!(error = %e, "accept error");
+                    }
+                }
+            }
+        };
+
+        // Stop reaper.
+        if let Some(handle) = reaper_handle {
+            handle.abort();
+        }
+
+        tracing::info!("Bolt WebSocket server stopped");
+        accept_result
+    }
 }
 
 fn spawn_connection<B: BoltBackend>(
@@ -279,7 +385,66 @@ fn spawn_connection<B: BoltBackend>(
     });
 }
 
-async fn run_handshake_and_connection<S, B>(
+#[cfg(feature = "ws")]
+fn spawn_ws_connection<B: BoltBackend>(
+    stream: tokio::net::TcpStream,
+    peer_addr: SocketAddr,
+    backend: Arc<B>,
+    session_manager: Arc<SessionManager>,
+    auth_validator: Option<Arc<dyn AuthValidator>>,
+    #[cfg(feature = "tls")] tls_acceptor: Option<Arc<TlsAcceptor>>,
+    #[cfg(not(feature = "tls"))] _tls_acceptor: Option<()>,
+    max_message_size: Option<usize>,
+) {
+    tokio::spawn(async move {
+        #[cfg(feature = "tls")]
+        if let Some(acceptor) = tls_acceptor {
+            match acceptor.accept(stream).await {
+                Ok(tls_stream) => match tokio_tungstenite::accept_async(tls_stream).await {
+                    Ok(ws_stream) => {
+                        let adapted = crate::ws::WsStream::new(ws_stream);
+                        run_handshake_and_connection(
+                            adapted,
+                            peer_addr,
+                            backend,
+                            session_manager,
+                            auth_validator,
+                            max_message_size,
+                        )
+                        .await;
+                    }
+                    Err(e) => {
+                        tracing::debug!(%peer_addr, error = %e, "WebSocket upgrade failed");
+                    }
+                },
+                Err(e) => {
+                    tracing::debug!(%peer_addr, error = %e, "TLS handshake failed");
+                }
+            }
+            return;
+        }
+
+        match tokio_tungstenite::accept_async(stream).await {
+            Ok(ws_stream) => {
+                let adapted = crate::ws::WsStream::new(ws_stream);
+                run_handshake_and_connection(
+                    adapted,
+                    peer_addr,
+                    backend,
+                    session_manager,
+                    auth_validator,
+                    max_message_size,
+                )
+                .await;
+            }
+            Err(e) => {
+                tracing::debug!(%peer_addr, error = %e, "WebSocket upgrade failed");
+            }
+        }
+    });
+}
+
+pub(crate) async fn run_handshake_and_connection<S, B>(
     stream: S,
     peer_addr: SocketAddr,
     backend: Arc<B>,

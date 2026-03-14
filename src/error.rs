@@ -30,6 +30,10 @@ pub enum BoltError {
 
     #[error("backend error: {0}")]
     Backend(String),
+
+    #[cfg(feature = "ws")]
+    #[error("WebSocket error: {0}")]
+    WebSocket(String),
 }
 
 impl BoltError {
@@ -85,10 +89,19 @@ impl BoltError {
                 e.to_string(),
             ),
             Self::Backend(m) => ("Neo.DatabaseError.General.UnknownError", m.clone()),
+            #[cfg(feature = "ws")]
+            Self::WebSocket(m) => ("Neo.TransientError.General.DatabaseUnavailable", m.clone()),
         };
         HashMap::from([
             ("code".to_string(), BoltValue::String(code.to_string())),
             ("message".to_string(), BoltValue::String(message)),
         ])
+    }
+}
+
+#[cfg(feature = "ws")]
+impl From<tokio_tungstenite::tungstenite::Error> for BoltError {
+    fn from(e: tokio_tungstenite::tungstenite::Error) -> Self {
+        Self::WebSocket(e.to_string())
     }
 }
