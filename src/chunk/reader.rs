@@ -8,6 +8,9 @@ use crate::error::BoltError;
 /// Maximum chunk size (2-byte unsigned length = 65535).
 const MAX_CHUNK_SIZE: usize = 65535;
 
+/// Default maximum message size: 16 MiB.
+const DEFAULT_MAX_MESSAGE_SIZE: usize = 16 * 1024 * 1024;
+
 /// Reads Bolt-chunked messages from an `AsyncRead` stream.
 ///
 /// Each message consists of one or more chunks (2-byte big-endian length prefix
@@ -15,6 +18,7 @@ const MAX_CHUNK_SIZE: usize = 65535;
 pub struct ChunkReader<R> {
     reader: R,
     buf: BytesMut,
+    max_message_size: usize,
 }
 
 impl<R: AsyncRead + Unpin> ChunkReader<R> {
@@ -22,7 +26,16 @@ impl<R: AsyncRead + Unpin> ChunkReader<R> {
         Self {
             reader,
             buf: BytesMut::with_capacity(MAX_CHUNK_SIZE),
+            max_message_size: DEFAULT_MAX_MESSAGE_SIZE,
         }
+    }
+
+    /// Sets the maximum allowed message size in bytes.
+    ///
+    /// Messages exceeding this limit will return a protocol error.
+    /// Default: 16 MiB.
+    pub fn set_max_message_size(&mut self, max_bytes: usize) {
+        self.max_message_size = max_bytes;
     }
 
     /// Reads a complete message (all chunks until the `0x0000` terminator).
@@ -38,6 +51,13 @@ impl<R: AsyncRead + Unpin> ChunkReader<R> {
             if chunk_len == 0 {
                 // End of message.
                 break;
+            }
+
+            if message.len() + chunk_len > self.max_message_size {
+                return Err(BoltError::Protocol(format!(
+                    "message size exceeds limit of {} bytes",
+                    self.max_message_size
+                )));
             }
 
             // Read chunk data.
@@ -87,5 +107,21 @@ mod tests {
         let mut reader = ChunkReader::new(Cursor::new(data));
         let msg = reader.read_message().await.unwrap();
         assert!(msg.is_empty());
+    }
+
+    #[tokio::test]
+    async fn read_message_exceeds_limit() {
+        // A 4-byte chunk, but with a 2-byte limit.
+        let data: Vec<u8> = vec![
+            0x00, 0x04, // chunk length = 4
+            0x01, 0x02, 0x03, 0x04, // data
+            0x00, 0x00, // terminator
+        ];
+        let mut reader = ChunkReader::new(Cursor::new(data));
+        reader.set_max_message_size(2);
+        let result = reader.read_message().await;
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("exceeds limit"), "unexpected error: {err}");
     }
 }

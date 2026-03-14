@@ -65,6 +65,11 @@ impl SessionManager {
         }
     }
 
+    /// Returns true if the session with the given ID is still registered.
+    pub fn contains(&self, id: &str) -> bool {
+        self.sessions.read().unwrap().contains_key(id)
+    }
+
     /// Returns the number of active sessions.
     pub fn count(&self) -> usize {
         self.sessions.read().unwrap().len()

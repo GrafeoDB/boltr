@@ -37,6 +37,17 @@ pub enum BoltValue {
 
 impl BoltValue {
     /// Returns the value as a string reference, if it is a `String` variant.
+    ///
+    /// ```
+    /// use boltr::types::BoltValue;
+    ///
+    /// let val = BoltValue::String("hello".to_string());
+    /// assert_eq!(val.as_str(), Some("hello"));
+    ///
+    /// let num = BoltValue::Integer(42);
+    /// assert_eq!(num.as_str(), None);
+    /// ```
+    #[must_use]
     pub fn as_str(&self) -> Option<&str> {
         match self {
             Self::String(s) => Some(s),
@@ -45,6 +56,17 @@ impl BoltValue {
     }
 
     /// Returns the value as an i64, if it is an `Integer` variant.
+    ///
+    /// ```
+    /// use boltr::types::BoltValue;
+    ///
+    /// let val = BoltValue::Integer(42);
+    /// assert_eq!(val.as_int(), Some(42));
+    ///
+    /// let text = BoltValue::String("hello".to_string());
+    /// assert_eq!(text.as_int(), None);
+    /// ```
+    #[must_use]
     pub fn as_int(&self) -> Option<i64> {
         match self {
             Self::Integer(i) => Some(*i),

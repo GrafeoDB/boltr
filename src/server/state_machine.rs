@@ -1,5 +1,7 @@
 //! Bolt connection state machine.
 
+use std::fmt;
+
 use crate::message::ClientMessage;
 
 /// The state of a Bolt connection.
@@ -23,8 +25,24 @@ pub enum ConnectionState {
     Defunct,
 }
 
+impl fmt::Display for ConnectionState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Negotiation => write!(f, "Negotiation"),
+            Self::Authentication => write!(f, "Authentication"),
+            Self::Ready => write!(f, "Ready"),
+            Self::Streaming => write!(f, "Streaming"),
+            Self::TxReady => write!(f, "TxReady"),
+            Self::TxStreaming => write!(f, "TxStreaming"),
+            Self::Failed => write!(f, "Failed"),
+            Self::Defunct => write!(f, "Defunct"),
+        }
+    }
+}
+
 impl ConnectionState {
     /// Returns whether a given client message is valid in this state.
+    #[must_use]
     pub fn accepts(&self, msg: &ClientMessage) -> bool {
         match self {
             Self::Negotiation => matches!(msg, ClientMessage::Hello { .. }),
@@ -69,6 +87,7 @@ impl ConnectionState {
     }
 
     /// Compute the next state after successfully processing a message.
+    #[must_use]
     pub fn transition_success(&self, msg: &ClientMessage) -> Self {
         match (self, msg) {
             // Handshake flow
@@ -103,6 +122,7 @@ impl ConnectionState {
     }
 
     /// Compute the next state after a message fails.
+    #[must_use]
     pub fn transition_failure(&self, msg: &ClientMessage) -> Self {
         match msg {
             ClientMessage::Goodbye => Self::Defunct,
@@ -111,8 +131,9 @@ impl ConnectionState {
         }
     }
 
-    /// Returns true when streaming is complete (no more records).
-    /// Used by the connection handler to transition Streaming→Ready.
+    /// Returns the state after streaming completes (no more records).
+    /// Used by the connection handler to transition Streaming to Ready.
+    #[must_use]
     pub fn complete_streaming(&self) -> Self {
         match self {
             Self::Streaming => Self::Ready,

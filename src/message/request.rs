@@ -1,5 +1,7 @@
 //! Client-to-server Bolt messages.
 
+use std::fmt;
+
 use crate::types::{BoltDict, BoltValue};
 
 /// A message sent from the client to the server.
@@ -51,6 +53,26 @@ pub enum ClientMessage {
 
     /// Client telemetry data (Bolt 5.4+). Server may safely ignore.
     Telemetry { api: i64 },
+}
+
+impl fmt::Display for ClientMessage {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Hello { .. } => write!(f, "HELLO"),
+            Self::Logon { .. } => write!(f, "LOGON"),
+            Self::Logoff => write!(f, "LOGOFF"),
+            Self::Goodbye => write!(f, "GOODBYE"),
+            Self::Reset => write!(f, "RESET"),
+            Self::Run { query, .. } => write!(f, "RUN {query:?}"),
+            Self::Pull { .. } => write!(f, "PULL"),
+            Self::Discard { .. } => write!(f, "DISCARD"),
+            Self::Begin { .. } => write!(f, "BEGIN"),
+            Self::Commit => write!(f, "COMMIT"),
+            Self::Rollback => write!(f, "ROLLBACK"),
+            Self::Route { .. } => write!(f, "ROUTE"),
+            Self::Telemetry { api } => write!(f, "TELEMETRY({api})"),
+        }
+    }
 }
 
 impl ClientMessage {

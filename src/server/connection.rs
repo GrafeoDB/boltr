@@ -57,9 +57,14 @@ where
         session_manager: Arc<SessionManager>,
         auth_validator: Option<Arc<dyn AuthValidator>>,
         peer_addr: SocketAddr,
+        max_message_size: Option<usize>,
     ) -> Self {
+        let mut chunk_reader = ChunkReader::new(reader);
+        if let Some(max) = max_message_size {
+            chunk_reader.set_max_message_size(max);
+        }
         Self {
-            reader: ChunkReader::new(reader),
+            reader: chunk_reader,
             writer: ChunkWriter::new(writer),
             backend,
             session_manager,
@@ -91,6 +96,15 @@ where
                     break;
                 }
             };
+
+            // Detect if idle reaper closed our session.
+            if let Some(ref session) = self.session
+                && !self.session_manager.contains(&session.0)
+            {
+                tracing::debug!(%self.peer_addr, "session reaped by idle timeout");
+                self.session = None;
+                break;
+            }
 
             if msg_bytes.is_empty() {
                 // NOOP / keep-alive.
@@ -239,6 +253,17 @@ where
     }
 
     async fn handle_logoff(&mut self) -> Result<(), BoltError> {
+        // Clear any in-flight state: abort pending transaction, discard results.
+        if let (Some(session), Some(tx)) = (&self.session, self.transaction.take()) {
+            let _ = self.backend.rollback(session, &tx).await;
+        }
+        self.pending_result = None;
+
+        // Notify the backend that the session is de-authenticated.
+        if let Some(ref session) = self.session {
+            self.backend.reset_session(session).await?;
+        }
+
         self.send_message(&ServerMessage::Success {
             metadata: BoltDict::new(),
         })
@@ -327,9 +352,20 @@ where
 
         let n = extra.get("n").and_then(|v| v.as_int()).unwrap_or(-1);
 
+        // Per Bolt spec, only -1 (all remaining) or positive values are valid.
+        if n < -1 {
+            return Err(BoltError::Protocol(format!(
+                "invalid PULL n value: {n}, must be -1 or positive"
+            )));
+        }
+
         let offset = pending.offset;
         let total = pending.records.len();
-        let count = if n == -1 { total - offset } else { n as usize };
+        let count = if n == -1 {
+            total - offset
+        } else {
+            n.unsigned_abs() as usize
+        };
         let end = (offset + count).min(total);
 
         // Collect records to send (avoids borrowing self while sending).
@@ -354,8 +390,9 @@ where
 
         if !has_more {
             // Include summary metadata.
-            let pending = self.pending_result.take().unwrap();
-            meta.extend(pending.summary);
+            if let Some(pending) = self.pending_result.take() {
+                meta.extend(pending.summary);
+            }
             self.state = self.state.complete_streaming();
         }
 
