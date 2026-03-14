@@ -181,7 +181,9 @@ fn decode_string_data(buf: &mut impl Buf, len: usize) -> Result<BoltValue, BoltE
 }
 
 fn decode_list_data(buf: &mut impl Buf, len: usize) -> Result<BoltValue, BoltError> {
-    let mut items = Vec::with_capacity(len);
+    // Cap pre-allocation to prevent OOM from malicious length declarations.
+    // Each list element requires at least 1 byte in the buffer.
+    let mut items = Vec::with_capacity(len.min(buf.remaining()));
     for _ in 0..len {
         items.push(decode_value(buf)?);
     }
@@ -189,7 +191,8 @@ fn decode_list_data(buf: &mut impl Buf, len: usize) -> Result<BoltValue, BoltErr
 }
 
 fn decode_dict_data(buf: &mut impl Buf, len: usize) -> Result<BoltValue, BoltError> {
-    let mut dict = BoltDict::with_capacity(len);
+    // Cap pre-allocation: each dict entry requires at least 2 bytes (key + value).
+    let mut dict = BoltDict::with_capacity(len.min(buf.remaining()));
     for _ in 0..len {
         let key = match decode_value(buf)? {
             BoltValue::String(s) => s,
