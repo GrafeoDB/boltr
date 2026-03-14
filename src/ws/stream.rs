@@ -153,3 +153,110 @@ where
             .map_err(|e| io::Error::new(io::ErrorKind::BrokenPipe, e))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use futures_util::SinkExt;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    use super::*;
+
+    /// Creates a connected WsStream pair (client, server) over an in-memory duplex.
+    async fn ws_pair() -> (
+        WsStream<impl AsyncRead + AsyncWrite + Unpin>,
+        WebSocketStream<impl AsyncRead + AsyncWrite + Unpin>,
+    ) {
+        let (client_io, server_io) = tokio::io::duplex(64 * 1024);
+
+        let (client_task, server_task) = tokio::join!(
+            tokio_tungstenite::client_async("ws://localhost/bolt", client_io),
+            tokio_tungstenite::accept_async(server_io),
+        );
+
+        let (client_ws, _response) = client_task.expect("client WS handshake");
+        let server_ws = server_task.expect("server WS handshake");
+
+        // Return WsStream wrapping the client side, raw server side for driving tests.
+        (WsStream::new(client_ws), server_ws)
+    }
+
+    #[tokio::test]
+    async fn read_binary_message() {
+        let (mut ws, mut server) = ws_pair().await;
+
+        // Server sends a binary message.
+        server
+            .send(Message::Binary(vec![0xAA, 0xBB, 0xCC].into()))
+            .await
+            .unwrap();
+
+        // WsStream should deliver the bytes.
+        let mut buf = [0u8; 3];
+        ws.read_exact(&mut buf).await.unwrap();
+        assert_eq!(buf, [0xAA, 0xBB, 0xCC]);
+    }
+
+    #[tokio::test]
+    async fn read_buffered_across_calls() {
+        let (mut ws, mut server) = ws_pair().await;
+
+        // Server sends 4 bytes in one WS message.
+        server
+            .send(Message::Binary(vec![1, 2, 3, 4].into()))
+            .await
+            .unwrap();
+
+        // Read 2 bytes at a time: should buffer the remainder.
+        let mut buf = [0u8; 2];
+        ws.read_exact(&mut buf).await.unwrap();
+        assert_eq!(buf, [1, 2]);
+
+        ws.read_exact(&mut buf).await.unwrap();
+        assert_eq!(buf, [3, 4]);
+    }
+
+    #[tokio::test]
+    async fn write_and_flush_produces_binary_message() {
+        let (mut ws, mut server) = ws_pair().await;
+
+        // Write through WsStream and flush.
+        ws.write_all(&[0x01, 0x02, 0x03]).await.unwrap();
+        ws.flush().await.unwrap();
+
+        // Server should receive a binary message.
+        use futures_util::StreamExt;
+        let msg = server.next().await.unwrap().unwrap();
+        match msg {
+            Message::Binary(data) => assert_eq!(&data[..], &[0x01, 0x02, 0x03]),
+            other => panic!("expected Binary, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn text_frame_rejected() {
+        let (mut ws, mut server) = ws_pair().await;
+
+        // Server sends a text frame (invalid for Bolt).
+        server.send(Message::Text("hello".into())).await.unwrap();
+
+        let mut buf = [0u8; 5];
+        let result = ws.read_exact(&mut buf).await;
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+        assert!(err.to_string().contains("binary"));
+    }
+
+    #[tokio::test]
+    async fn close_frame_produces_eof() {
+        let (mut ws, mut server) = ws_pair().await;
+
+        // Server sends close frame.
+        server.send(Message::Close(None)).await.unwrap();
+
+        // WsStream should return 0 bytes (EOF).
+        let mut buf = [0u8; 1];
+        let n = ws.read(&mut buf).await.unwrap();
+        assert_eq!(n, 0);
+    }
+}
