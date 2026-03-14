@@ -16,7 +16,9 @@ use crate::server::handshake::server_handshake;
 use crate::server::session_manager::SessionManager;
 
 #[cfg(feature = "tls")]
-use std::io::BufReader;
+use rustls_pki_types::pem::PemObject;
+#[cfg(feature = "tls")]
+use rustls_pki_types::{CertificateDer, PrivateKeyDer};
 #[cfg(feature = "tls")]
 use tokio_rustls::TlsAcceptor;
 
@@ -30,18 +32,12 @@ pub struct TlsConfig {
 impl TlsConfig {
     /// Creates a TLS configuration from PEM-encoded certificate and key bytes.
     pub fn from_pem(cert_pem: &[u8], key_pem: &[u8]) -> Result<Self, BoltError> {
-        let certs: Vec<_> = rustls_pemfile::certs(&mut BufReader::new(cert_pem))
+        let certs: Vec<CertificateDer<'static>> = CertificateDer::pem_slice_iter(cert_pem)
             .collect::<Result<_, _>>()
             .map_err(|e| BoltError::Io(std::io::Error::new(std::io::ErrorKind::InvalidData, e)))?;
 
-        let key = rustls_pemfile::private_key(&mut BufReader::new(key_pem))
-            .map_err(|e| BoltError::Io(std::io::Error::new(std::io::ErrorKind::InvalidData, e)))?
-            .ok_or_else(|| {
-                BoltError::Io(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    "no private key found in PEM data",
-                ))
-            })?;
+        let key = PrivateKeyDer::from_pem_slice(key_pem)
+            .map_err(|e| BoltError::Io(std::io::Error::new(std::io::ErrorKind::InvalidData, e)))?;
 
         let config = tokio_rustls::rustls::ServerConfig::builder()
             .with_no_client_auth()
@@ -180,7 +176,7 @@ impl<B: BoltBackend> BoltServer<B> {
                                     backend.clone(),
                                     session_manager.clone(),
                                     auth_validator.clone(),
-                                    tls_acceptor,
+                                    tls_acceptor.clone(),
                                 );
                             }
                             Err(e) => {
@@ -205,7 +201,7 @@ impl<B: BoltBackend> BoltServer<B> {
                             backend.clone(),
                             session_manager.clone(),
                             auth_validator.clone(),
-                            tls_acceptor,
+                            tls_acceptor.clone(),
                         );
                     }
                     Err(e) => {

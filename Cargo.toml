@@ -21,15 +21,15 @@ uuid = { version = "1", features = ["v4"] }
 
 [features]
 default = []
-tls = ["dep:tokio-rustls", "dep:rustls-pemfile"]
+tls = ["dep:tokio-rustls", "dep:rustls-pki-types"]
 client = []
 
 [dependencies.tokio-rustls]
 version = "0.26"
 optional = true
 
-[dependencies.rustls-pemfile]
-version = "2"
+[dependencies.rustls-pki-types]
+version = "1.9"
 optional = true
 
 [dev-dependencies]
