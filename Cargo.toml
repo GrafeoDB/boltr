@@ -1,6 +1,6 @@
 [package]
 name = "boltr"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 rust-version = "1.91.0"
 license = "MIT OR Apache-2.0"
@@ -23,14 +23,25 @@ uuid = { version = "1", features = ["v4"] }
 default = []
 tls = ["dep:tokio-rustls", "dep:rustls-pki-types"]
 client = []
+ws = ["dep:tokio-tungstenite", "dep:futures-util"]
 
 [dependencies.tokio-rustls]
 version = "0.26"
 optional = true
 
 [dependencies.rustls-pki-types]
-version = "1.9"
+version = "1"
 optional = true
+
+[dependencies.tokio-tungstenite]
+version = "0.26"
+optional = true
+
+[dependencies.futures-util]
+version = "0.3"
+optional = true
+default-features = false
+features = ["sink"]
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }

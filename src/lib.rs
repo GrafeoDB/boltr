@@ -62,6 +62,9 @@ pub mod version;
 #[cfg(feature = "client")]
 pub mod client;
 
+#[cfg(feature = "ws")]
+pub mod ws;
+
 // Crate root re-exports for convenience.
 pub use error::BoltError;
 #[cfg(feature = "tls")]
@@ -74,3 +77,6 @@ pub use types::BoltValue;
 
 #[cfg(feature = "client")]
 pub use client::{BoltConnection, BoltSession};
+
+#[cfg(feature = "ws")]
+pub use ws::WsStream;

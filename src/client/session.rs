@@ -42,10 +42,44 @@ impl BoltSession {
         let mut conn = BoltConnection::connect(addr).await?;
         let extra = BoltDict::from([(
             "user_agent".to_string(),
-            BoltValue::String("boltr-client/0.1".to_string()),
+            BoltValue::String("boltr-client/0.1.2".to_string()),
         )]);
         conn.hello(extra).await?;
         conn.logon("none", None, None).await?;
+        Ok(Self { conn })
+    }
+
+    /// Connects over WebSocket and authenticates (HELLO + LOGON with "none" scheme).
+    ///
+    /// Accepts `ws://` and `wss://` URLs.
+    #[cfg(feature = "ws")]
+    pub async fn connect_ws(url: &str) -> Result<Self, BoltError> {
+        let mut conn = BoltConnection::connect_ws(url).await?;
+        let extra = BoltDict::from([(
+            "user_agent".to_string(),
+            BoltValue::String("boltr-client/0.1.2".to_string()),
+        )]);
+        conn.hello(extra).await?;
+        conn.logon("none", None, None).await?;
+        Ok(Self { conn })
+    }
+
+    /// Connects over WebSocket and authenticates with basic auth.
+    ///
+    /// Accepts `ws://` and `wss://` URLs.
+    #[cfg(feature = "ws")]
+    pub async fn connect_ws_basic(
+        url: &str,
+        username: &str,
+        password: &str,
+    ) -> Result<Self, BoltError> {
+        let mut conn = BoltConnection::connect_ws(url).await?;
+        let extra = BoltDict::from([(
+            "user_agent".to_string(),
+            BoltValue::String("boltr-client/0.1.2".to_string()),
+        )]);
+        conn.hello(extra).await?;
+        conn.logon("basic", Some(username), Some(password)).await?;
         Ok(Self { conn })
     }
 
@@ -58,7 +92,7 @@ impl BoltSession {
         let mut conn = BoltConnection::connect(addr).await?;
         let extra = BoltDict::from([(
             "user_agent".to_string(),
-            BoltValue::String("boltr-client/0.1".to_string()),
+            BoltValue::String("boltr-client/0.1.2".to_string()),
         )]);
         conn.hello(extra).await?;
         conn.logon("basic", Some(username), Some(password)).await?;
