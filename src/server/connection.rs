@@ -57,9 +57,14 @@ where
         session_manager: Arc<SessionManager>,
         auth_validator: Option<Arc<dyn AuthValidator>>,
         peer_addr: SocketAddr,
+        max_message_size: Option<usize>,
     ) -> Self {
+        let mut chunk_reader = ChunkReader::new(reader);
+        if let Some(max) = max_message_size {
+            chunk_reader.set_max_message_size(max);
+        }
         Self {
-            reader: ChunkReader::new(reader),
+            reader: chunk_reader,
             writer: ChunkWriter::new(writer),
             backend,
             session_manager,

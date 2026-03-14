@@ -47,6 +47,7 @@ impl BoltValue {
     /// let num = BoltValue::Integer(42);
     /// assert_eq!(num.as_str(), None);
     /// ```
+    #[must_use]
     pub fn as_str(&self) -> Option<&str> {
         match self {
             Self::String(s) => Some(s),
@@ -65,6 +66,7 @@ impl BoltValue {
     /// let text = BoltValue::String("hello".to_string());
     /// assert_eq!(text.as_int(), None);
     /// ```
+    #[must_use]
     pub fn as_int(&self) -> Option<i64> {
         match self {
             Self::Integer(i) => Some(*i),

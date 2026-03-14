@@ -150,6 +150,7 @@ impl BoltSession {
 
 /// Result of a Bolt query execution.
 #[derive(Debug)]
+#[must_use]
 pub struct QueryResult {
     /// Column names from the RUN metadata.
     pub columns: Vec<String>,

@@ -75,6 +75,7 @@ pub struct BoltServer<B: BoltBackend> {
     auth_validator: Option<Arc<dyn AuthValidator>>,
     idle_timeout: Option<Duration>,
     max_sessions: Option<usize>,
+    max_message_size: Option<usize>,
     shutdown: Option<Pin<Box<dyn Future<Output = ()> + Send>>>,
     #[cfg(feature = "tls")]
     tls_config: Option<TlsConfig>,
@@ -88,6 +89,7 @@ impl<B: BoltBackend> BoltServer<B> {
             auth_validator: None,
             idle_timeout: None,
             max_sessions: None,
+            max_message_size: None,
             shutdown: None,
             #[cfg(feature = "tls")]
             tls_config: None,
@@ -116,6 +118,15 @@ impl<B: BoltBackend> BoltServer<B> {
     /// Sets the maximum number of concurrent sessions.
     pub fn max_sessions(mut self, limit: usize) -> Self {
         self.max_sessions = Some(limit);
+        self
+    }
+
+    /// Sets the maximum allowed size for a single Bolt message in bytes.
+    ///
+    /// Messages exceeding this limit will be rejected with a protocol error.
+    /// Default: 16 MiB.
+    pub fn max_message_size(mut self, bytes: usize) -> Self {
+        self.max_message_size = Some(bytes);
         self
     }
 
@@ -163,6 +174,7 @@ impl<B: BoltBackend> BoltServer<B> {
 
         // Accept loop.
         let shutdown = self.shutdown;
+        let max_message_size = self.max_message_size;
         let accept_result = if let Some(shutdown_signal) = shutdown {
             tokio::pin!(shutdown_signal);
             loop {
@@ -177,6 +189,7 @@ impl<B: BoltBackend> BoltServer<B> {
                                     session_manager.clone(),
                                     auth_validator.clone(),
                                     tls_acceptor.clone(),
+                                    max_message_size,
                                 );
                             }
                             Err(e) => {
@@ -202,6 +215,7 @@ impl<B: BoltBackend> BoltServer<B> {
                             session_manager.clone(),
                             auth_validator.clone(),
                             tls_acceptor.clone(),
+                            max_message_size,
                         );
                     }
                     Err(e) => {
@@ -229,6 +243,7 @@ fn spawn_connection<B: BoltBackend>(
     auth_validator: Option<Arc<dyn AuthValidator>>,
     #[cfg(feature = "tls")] tls_acceptor: Option<Arc<TlsAcceptor>>,
     #[cfg(not(feature = "tls"))] _tls_acceptor: Option<()>,
+    max_message_size: Option<usize>,
 ) {
     tokio::spawn(async move {
         #[cfg(feature = "tls")]
@@ -241,6 +256,7 @@ fn spawn_connection<B: BoltBackend>(
                         backend,
                         session_manager,
                         auth_validator,
+                        max_message_size,
                     )
                     .await;
                 }
@@ -251,8 +267,15 @@ fn spawn_connection<B: BoltBackend>(
             return;
         }
 
-        run_handshake_and_connection(stream, peer_addr, backend, session_manager, auth_validator)
-            .await;
+        run_handshake_and_connection(
+            stream,
+            peer_addr,
+            backend,
+            session_manager,
+            auth_validator,
+            max_message_size,
+        )
+        .await;
     });
 }
 
@@ -262,6 +285,7 @@ async fn run_handshake_and_connection<S, B>(
     backend: Arc<B>,
     session_manager: Arc<SessionManager>,
     auth_validator: Option<Arc<dyn AuthValidator>>,
+    max_message_size: Option<usize>,
 ) where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
     B: BoltBackend,
@@ -274,8 +298,15 @@ async fn run_handshake_and_connection<S, B>(
         Ok(version) => {
             tracing::debug!(%peer_addr, ?version, "Bolt handshake complete");
             let (rh, wh) = tokio::io::split(combined);
-            let mut conn =
-                Connection::new(rh, wh, backend, session_manager, auth_validator, peer_addr);
+            let mut conn = Connection::new(
+                rh,
+                wh,
+                backend,
+                session_manager,
+                auth_validator,
+                peer_addr,
+                max_message_size,
+            );
             if let Err(e) = conn.run().await {
                 tracing::debug!(%peer_addr, error = %e, "Bolt connection closed");
             }
