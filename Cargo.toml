@@ -35,5 +35,3 @@ optional = true
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
 
-[lints.clippy]
-needless_for_each = "allow"

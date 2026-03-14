@@ -1,5 +1,7 @@
 //! Bolt connection state machine.
 
+use std::fmt;
+
 use crate::message::ClientMessage;
 
 /// The state of a Bolt connection.
@@ -21,6 +23,21 @@ pub enum ConnectionState {
     Failed,
     /// Terminal state, connection should be closed.
     Defunct,
+}
+
+impl fmt::Display for ConnectionState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Negotiation => write!(f, "Negotiation"),
+            Self::Authentication => write!(f, "Authentication"),
+            Self::Ready => write!(f, "Ready"),
+            Self::Streaming => write!(f, "Streaming"),
+            Self::TxReady => write!(f, "TxReady"),
+            Self::TxStreaming => write!(f, "TxStreaming"),
+            Self::Failed => write!(f, "Failed"),
+            Self::Defunct => write!(f, "Defunct"),
+        }
+    }
 }
 
 impl ConnectionState {

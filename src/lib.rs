@@ -61,3 +61,16 @@ pub mod version;
 
 #[cfg(feature = "client")]
 pub mod client;
+
+// Crate root re-exports for convenience.
+pub use error::BoltError;
+#[cfg(feature = "tls")]
+pub use server::TlsConfig;
+pub use server::{
+    AuthValidator, BoltBackend, BoltRecord, BoltServer, ResultStream, SessionHandle,
+    TransactionHandle,
+};
+pub use types::BoltValue;
+
+#[cfg(feature = "client")]
+pub use client::{BoltConnection, BoltSession};
