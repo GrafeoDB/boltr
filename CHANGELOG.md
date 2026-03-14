@@ -16,10 +16,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **TLS accept loop**: fixed `tls_acceptor` moved-in-loop compile error when `tls` feature is enabled.
 
 ### Added
+- **WebSocket transport** (`ws` feature): Bolt-over-WebSocket support via `tokio-tungstenite`.
+  - `WsStream` adapter: wraps `WebSocketStream` as `AsyncRead + AsyncWrite` for seamless integration with existing Bolt framing.
+  - `BoltServer::ws_serve(addr)`: standalone Bolt-over-WebSocket server (with WSS when combined with the `tls` feature).
+  - `ws::server::accept_ws()` and `handle_ws()`: accept pre-upgraded WebSocket connections for integration with HTTP servers (e.g., Axum).
+  - `BoltConnection::connect_ws(url)`: client WebSocket connection supporting `ws://` and `wss://` URLs.
+  - `BoltSession::connect_ws()` and `connect_ws_basic()`: high-level client convenience methods.
 - **Max message size**: `ChunkReader` enforces a configurable limit (default 16 MiB), preventing multi-GB message accumulation. Exposed via `BoltServer::max_message_size()`.
 - `Display` implementations for `ConnectionState`, `ClientMessage`, and `ServerMessage`.
 - Crate root re-exports: `BoltError`, `BoltValue`, `BoltBackend`, `BoltServer`, `BoltSession`, and more.
 - `#[must_use]` annotations on `BoltValue::as_str()`, `BoltValue::as_int()`, `QueryResult`, and `ConnectionState` transition methods.
+
+### Changed
+- `BoltConnection` internals refactored to trait objects (`Box<dyn AsyncRead/Write>`) for transport flexibility.
 
 ### Removed
 - Vestigial `needless_for_each` clippy lint allow from `Cargo.toml`.
@@ -67,5 +76,6 @@ Initial release.
 - CI pipeline: formatting, clippy, tests (Linux/Windows/macOS), coverage, and security audit.
 - Dual-licensed under MIT and Apache-2.0.
 
+[0.1.2]: https://github.com/GrafeoDB/boltr/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/GrafeoDB/boltr/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/GrafeoDB/boltr/releases/tag/v0.1.0
