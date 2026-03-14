@@ -16,8 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **TLS accept loop**: fixed `tls_acceptor` moved-in-loop compile error when `tls` feature is enabled.
 
 ### Added
+- **Max message size**: `ChunkReader` enforces a configurable limit (default 16 MiB), preventing multi-GB message accumulation. Exposed via `BoltServer::max_message_size()`.
 - `Display` implementations for `ConnectionState`, `ClientMessage`, and `ServerMessage`.
 - Crate root re-exports: `BoltError`, `BoltValue`, `BoltBackend`, `BoltServer`, `BoltSession`, and more.
+- `#[must_use]` annotations on `BoltValue::as_str()`, `BoltValue::as_int()`, `QueryResult`, and `ConnectionState` transition methods.
 
 ### Removed
 - Vestigial `needless_for_each` clippy lint allow from `Cargo.toml`.
