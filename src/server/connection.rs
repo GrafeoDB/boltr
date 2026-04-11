@@ -223,7 +223,7 @@ where
     }
 
     async fn handle_logon(&mut self, auth: &BoltDict) -> Result<(), BoltError> {
-        if let Some(ref validator) = self.auth_validator {
+        let auth_info = if let Some(ref validator) = self.auth_validator {
             let creds = AuthCredentials {
                 scheme: auth
                     .get("scheme")
@@ -239,13 +239,26 @@ where
                     .and_then(|v| v.as_str())
                     .map(String::from),
             };
-            validator.validate(&creds).await?;
+            Some(validator.validate(&creds).await?)
+        } else {
+            None
+        };
+
+        let credentials_expired = auth_info
+            .as_ref()
+            .is_some_and(|info| info.credentials_expired);
+
+        if let (Some(session), Some(info)) = (&self.session, auth_info) {
+            self.backend.set_session_auth(session, info).await?;
         }
 
-        self.send_message(&ServerMessage::Success {
-            metadata: BoltDict::new(),
-        })
-        .await?;
+        let mut metadata = BoltDict::new();
+        if credentials_expired {
+            metadata.insert("credentials_expired".into(), BoltValue::Boolean(true));
+        }
+
+        self.send_message(&ServerMessage::Success { metadata })
+            .await?;
         self.state = self.state.transition_success(&ClientMessage::Logon {
             auth: BoltDict::new(),
         });

@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 
 use crate::error::BoltError;
+use crate::server::auth::AuthInfo;
 use crate::types::{BoltDict, BoltValue};
 
 /// Opaque handle identifying a Bolt session (one per TCP connection).
@@ -133,6 +134,18 @@ pub trait BoltBackend: Send + Sync + 'static {
 
     /// Create a new session. Called once during HELLO processing.
     async fn create_session(&self, config: &SessionConfig) -> Result<SessionHandle, BoltError>;
+
+    /// Called after successful authentication to associate identity with a session.
+    ///
+    /// Backends can use this to scope session permissions based on the
+    /// authenticated principal. Default implementation is a no-op.
+    async fn set_session_auth(
+        &self,
+        _session: &SessionHandle,
+        _auth_info: AuthInfo,
+    ) -> Result<(), BoltError> {
+        Ok(())
+    }
 
     /// Close a session and release resources. Called on GOODBYE or disconnect.
     async fn close_session(&self, session: &SessionHandle) -> Result<(), BoltError>;

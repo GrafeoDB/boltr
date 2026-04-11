@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-04-11
+
+### Added
+- `AuthInfo` struct with `principal: String` field, representing the authenticated identity from LOGON validation.
+- `BoltBackend::set_session_auth()` default method, called after successful LOGON to pass `AuthInfo` to the backend.
+
+### Changed
+- **Breaking**: `AuthValidator::validate()` return type changed from `Result<(), BoltError>` to `Result<AuthInfo, BoltError>`. The `AuthInfo` flows from LOGON validation to the backend via `set_session_auth()`.
+
 ## [0.1.2] - 2026-03-14
 
 ### Fixed
@@ -76,6 +85,7 @@ Initial release.
 - CI pipeline: formatting, clippy, tests (Linux/Windows/macOS), coverage, and security audit.
 - Dual-licensed under MIT and Apache-2.0.
 
+[0.2.0]: https://github.com/GrafeoDB/boltr/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/GrafeoDB/boltr/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/GrafeoDB/boltr/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/GrafeoDB/boltr/releases/tag/v0.1.0
