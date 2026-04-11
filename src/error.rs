@@ -28,6 +28,10 @@ pub enum BoltError {
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
 
+    /// Permission denied: authenticated but lacks required role/permission.
+    #[error("forbidden: {0}")]
+    Forbidden(String),
+
     #[error("backend error: {0}")]
     Backend(String),
 
@@ -88,6 +92,7 @@ impl BoltError {
                 "Neo.TransientError.General.DatabaseUnavailable",
                 e.to_string(),
             ),
+            Self::Forbidden(m) => ("Neo.ClientError.Security.Forbidden", m.clone()),
             Self::Backend(m) => ("Neo.DatabaseError.General.UnknownError", m.clone()),
             #[cfg(feature = "ws")]
             Self::WebSocket(m) => ("Neo.TransientError.General.DatabaseUnavailable", m.clone()),

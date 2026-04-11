@@ -8,6 +8,8 @@ use crate::server::AuthCredentials;
 pub struct AuthInfo {
     /// Authenticated principal (user/token identifier).
     pub principal: String,
+    /// If true, the client should change credentials before proceeding.
+    pub credentials_expired: bool,
 }
 
 /// Validates authentication credentials during the LOGON phase.
