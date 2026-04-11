@@ -70,7 +70,7 @@ pub use error::BoltError;
 #[cfg(feature = "tls")]
 pub use server::TlsConfig;
 pub use server::{
-    AuthValidator, BoltBackend, BoltRecord, BoltServer, ResultStream, SessionHandle,
+    AuthInfo, AuthValidator, BoltBackend, BoltRecord, BoltServer, ResultStream, SessionHandle,
     TransactionHandle,
 };
 pub use types::BoltValue;

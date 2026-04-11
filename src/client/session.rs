@@ -42,7 +42,7 @@ impl BoltSession {
         let mut conn = BoltConnection::connect(addr).await?;
         let extra = BoltDict::from([(
             "user_agent".to_string(),
-            BoltValue::String("boltr-client/0.1.2".to_string()),
+            BoltValue::String("boltr-client/0.2.0".to_string()),
         )]);
         conn.hello(extra).await?;
         conn.logon("none", None, None).await?;
@@ -57,7 +57,7 @@ impl BoltSession {
         let mut conn = BoltConnection::connect_ws(url).await?;
         let extra = BoltDict::from([(
             "user_agent".to_string(),
-            BoltValue::String("boltr-client/0.1.2".to_string()),
+            BoltValue::String("boltr-client/0.2.0".to_string()),
         )]);
         conn.hello(extra).await?;
         conn.logon("none", None, None).await?;
@@ -76,7 +76,7 @@ impl BoltSession {
         let mut conn = BoltConnection::connect_ws(url).await?;
         let extra = BoltDict::from([(
             "user_agent".to_string(),
-            BoltValue::String("boltr-client/0.1.2".to_string()),
+            BoltValue::String("boltr-client/0.2.0".to_string()),
         )]);
         conn.hello(extra).await?;
         conn.logon("basic", Some(username), Some(password)).await?;
@@ -92,7 +92,7 @@ impl BoltSession {
         let mut conn = BoltConnection::connect(addr).await?;
         let extra = BoltDict::from([(
             "user_agent".to_string(),
-            BoltValue::String("boltr-client/0.1.2".to_string()),
+            BoltValue::String("boltr-client/0.2.0".to_string()),
         )]);
         conn.hello(extra).await?;
         conn.logon("basic", Some(username), Some(password)).await?;

@@ -137,6 +137,7 @@ impl<B: BoltBackend> BoltServer<B> {
     }
 
     /// Starts the Bolt server, listening for TCP connections on `addr`.
+    #[allow(clippy::clone_on_copy)] // tls_acceptor is Option<Arc<..>> with tls, Option<()> without
     pub async fn serve(self, addr: SocketAddr) -> Result<(), BoltError> {
         let listener = TcpListener::bind(addr).await?;
         let backend = Arc::new(self.backend);
@@ -243,6 +244,7 @@ impl<B: BoltBackend> BoltServer<B> {
     /// When the `tls` feature is also enabled, connections are TLS-wrapped
     /// before the WebSocket upgrade (WSS).
     #[cfg(feature = "ws")]
+    #[allow(clippy::clone_on_copy)] // tls_acceptor is Option<Arc<..>> with tls, Option<()> without
     pub async fn ws_serve(self, addr: SocketAddr) -> Result<(), BoltError> {
         let listener = TcpListener::bind(addr).await?;
         let backend = Arc::new(self.backend);

@@ -223,7 +223,7 @@ where
     }
 
     async fn handle_logon(&mut self, auth: &BoltDict) -> Result<(), BoltError> {
-        if let Some(ref validator) = self.auth_validator {
+        let auth_info = if let Some(ref validator) = self.auth_validator {
             let creds = AuthCredentials {
                 scheme: auth
                     .get("scheme")
@@ -239,7 +239,13 @@ where
                     .and_then(|v| v.as_str())
                     .map(String::from),
             };
-            validator.validate(&creds).await?;
+            Some(validator.validate(&creds).await?)
+        } else {
+            None
+        };
+
+        if let (Some(session), Some(info)) = (&self.session, auth_info) {
+            self.backend.set_session_auth(session, info).await?;
         }
 
         self.send_message(&ServerMessage::Success {
