@@ -5,14 +5,17 @@ use bytes::Buf;
 use super::{ClientMessage, ServerMessage, sig};
 use crate::error::BoltError;
 use crate::packstream::decode::decode_value;
+use crate::packstream::marker::TINY_STRUCT_NIBBLE;
 use crate::types::{BoltDict, BoltValue};
 
 /// Decodes a client message from PackStream bytes.
+///
+/// Returns a protocol error (never panics) when the message is truncated, is
+/// not a PackStream structure, has an unknown signature, has too few fields
+/// or contains malformed values.
 pub fn decode_client_message(data: &[u8]) -> Result<ClientMessage, BoltError> {
     let mut buf = data;
-    let marker = read_u8(&mut buf)?;
-    let field_count = marker & 0x0F;
-    let tag = read_u8(&mut buf)?;
+    let (field_count, tag) = read_message_header(&mut buf)?;
 
     match tag {
         sig::HELLO => {
@@ -89,11 +92,11 @@ pub fn decode_client_message(data: &[u8]) -> Result<ClientMessage, BoltError> {
 }
 
 /// Decodes a server message from PackStream bytes.
+///
+/// Returns a protocol error (never panics) on malformed input.
 pub fn decode_server_message(data: &[u8]) -> Result<ServerMessage, BoltError> {
     let mut buf = data;
-    let marker = read_u8(&mut buf)?;
-    let field_count = marker & 0x0F;
-    let tag = read_u8(&mut buf)?;
+    let (field_count, tag) = read_message_header(&mut buf)?;
 
     match tag {
         sig::SUCCESS => {
@@ -126,6 +129,18 @@ fn read_u8(buf: &mut &[u8]) -> Result<u8, BoltError> {
     }
 }
 
+/// Reads the structure marker and signature byte that start every message.
+fn read_message_header(buf: &mut &[u8]) -> Result<(u8, u8), BoltError> {
+    let marker = read_u8(buf)?;
+    if marker & 0xF0 != TINY_STRUCT_NIBBLE {
+        return Err(BoltError::Protocol(format!(
+            "message must be a PackStream structure, got marker 0x{marker:02X}"
+        )));
+    }
+    let tag = read_u8(buf)?;
+    Ok((marker & 0x0F, tag))
+}
+
 fn expect_fields(msg_name: &str, got: u8, expected: u8) -> Result<(), BoltError> {
     if got < expected {
         Err(BoltError::Protocol(format!(
@@ -140,7 +155,8 @@ fn require_string(v: BoltValue) -> Result<String, BoltError> {
     match v {
         BoltValue::String(s) => Ok(s),
         other => Err(BoltError::Protocol(format!(
-            "expected string, got: {other}"
+            "expected String, got {}",
+            other.type_name()
         ))),
     }
 }
@@ -148,14 +164,20 @@ fn require_string(v: BoltValue) -> Result<String, BoltError> {
 fn require_dict(v: BoltValue) -> Result<BoltDict, BoltError> {
     match v {
         BoltValue::Dict(d) => Ok(d),
-        other => Err(BoltError::Protocol(format!("expected dict, got: {other}"))),
+        other => Err(BoltError::Protocol(format!(
+            "expected Dictionary, got {}",
+            other.type_name()
+        ))),
     }
 }
 
 fn require_list(v: BoltValue) -> Result<Vec<BoltValue>, BoltError> {
     match v {
         BoltValue::List(l) => Ok(l),
-        other => Err(BoltError::Protocol(format!("expected list, got: {other}"))),
+        other => Err(BoltError::Protocol(format!(
+            "expected List, got {}",
+            other.type_name()
+        ))),
     }
 }
 
@@ -290,5 +312,113 @@ mod tests {
     fn round_trip_telemetry() {
         let msg = ClientMessage::Telemetry { api: 42 };
         assert_eq!(round_trip_client(&msg), msg);
+    }
+
+    #[test]
+    fn round_trip_every_client_message() {
+        let extra = BoltDict::from([("n".to_string(), BoltValue::Integer(7))]);
+        for msg in [
+            ClientMessage::Hello {
+                extra: extra.clone(),
+            },
+            ClientMessage::Logon {
+                auth: extra.clone(),
+            },
+            ClientMessage::Logoff,
+            ClientMessage::Goodbye,
+            ClientMessage::Reset,
+            ClientMessage::Run {
+                query: "RETURN $x".into(),
+                parameters: BoltDict::from([("x".to_string(), BoltValue::Float(1.5))]),
+                extra: extra.clone(),
+            },
+            ClientMessage::Pull {
+                extra: extra.clone(),
+            },
+            ClientMessage::Discard {
+                extra: extra.clone(),
+            },
+            ClientMessage::Begin {
+                extra: extra.clone(),
+            },
+            ClientMessage::Commit,
+            ClientMessage::Rollback,
+            ClientMessage::Route {
+                routing: BoltDict::new(),
+                bookmarks: vec![],
+                extra,
+            },
+            ClientMessage::Telemetry { api: -1 },
+        ] {
+            assert_eq!(round_trip_client(&msg), msg);
+        }
+    }
+
+    #[test]
+    fn empty_and_truncated_messages_are_rejected() {
+        assert!(decode_client_message(&[]).is_err());
+        assert!(decode_client_message(&[0xB1]).is_err());
+        assert!(decode_server_message(&[]).is_err());
+        assert!(decode_server_message(&[0xB1]).is_err());
+        // RUN missing its parameters and extra dictionaries.
+        assert!(decode_client_message(&[0xB3, sig::RUN, 0x81, b'x']).is_err());
+        // SUCCESS whose metadata dictionary is cut short.
+        assert!(decode_server_message(&[0xB1, sig::SUCCESS, 0xA1, 0x81]).is_err());
+    }
+
+    /// Regression: the first byte was only masked for its field count, so a
+    /// message starting with any byte (for example a tiny int) was accepted
+    /// as a structure.
+    #[test]
+    fn non_structure_marker_is_rejected() {
+        for first in [0x01u8, 0x81, 0x91, 0xA1, 0xC0, 0xF1] {
+            let err = decode_client_message(&[first, sig::RESET]).unwrap_err();
+            assert!(
+                err.to_string().contains("structure"),
+                "0x{first:02X}: {err}"
+            );
+            assert!(decode_server_message(&[first, sig::IGNORED]).is_err());
+        }
+    }
+
+    #[test]
+    fn unknown_signatures_are_rejected() {
+        let err = decode_client_message(&[0xB0, 0x55]).unwrap_err();
+        assert!(err.to_string().contains("0x55"), "{err}");
+        // A server message signature is not a client message and vice versa.
+        assert!(decode_client_message(&[0xB0, sig::IGNORED]).is_err());
+        assert!(decode_server_message(&[0xB0, sig::RESET]).is_err());
+    }
+
+    #[test]
+    fn too_few_fields_are_rejected() {
+        for (tag, name) in [
+            (sig::HELLO, "HELLO"),
+            (sig::LOGON, "LOGON"),
+            (sig::PULL, "PULL"),
+            (sig::DISCARD, "DISCARD"),
+            (sig::BEGIN, "BEGIN"),
+            (sig::TELEMETRY, "TELEMETRY"),
+        ] {
+            let err = decode_client_message(&[0xB0, tag]).unwrap_err();
+            assert!(err.to_string().contains(name), "{name}: {err}");
+        }
+        assert!(decode_client_message(&[0xB2, sig::RUN, 0x80, 0xA0]).is_err());
+        assert!(decode_client_message(&[0xB2, sig::ROUTE, 0xA0, 0x90]).is_err());
+        assert!(decode_server_message(&[0xB0, sig::SUCCESS]).is_err());
+        assert!(decode_server_message(&[0xB0, sig::RECORD]).is_err());
+        assert!(decode_server_message(&[0xB0, sig::FAILURE]).is_err());
+    }
+
+    #[test]
+    fn wrong_field_types_are_rejected() {
+        // RUN whose query is an integer.
+        assert!(decode_client_message(&[0xB3, sig::RUN, 0x01, 0xA0, 0xA0]).is_err());
+        // HELLO whose extra is a list.
+        assert!(decode_client_message(&[0xB1, sig::HELLO, 0x90]).is_err());
+        // ROUTE whose bookmarks are a dictionary.
+        assert!(decode_client_message(&[0xB3, sig::ROUTE, 0xA0, 0xA0, 0xA0]).is_err());
+        // RECORD whose data is a dictionary.
+        assert!(decode_server_message(&[0xB1, sig::RECORD, 0xA0]).is_err());
     }
 }

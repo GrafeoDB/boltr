@@ -15,7 +15,7 @@ Any Bolt-compatible database engine can plug in via the `BoltBackend` trait. Bol
 - **TLS:** Optional TLS via `tls` feature flag (tokio-rustls), works with both TCP and WebSocket (WSS)
 - **Auth:** Pluggable authentication via `AuthValidator` trait
 - **Observability:** Structured tracing via `tracing` crate
-- **Graceful shutdown:** Drain connections on signal
+- **Shutdown:** Stop accepting connections on signal (open connections run until their clients disconnect)
 
 ## Quick Start
 
@@ -23,7 +23,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-boltr = "0.1"
+boltr = "0.2"
 ```
 
 ### Implementing a Backend
@@ -73,13 +73,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+Connection limits:
+
+- A new connection must finish the TLS/WebSocket upgrade, the Bolt handshake, HELLO and LOGON within 30 seconds or it is closed. Change it with `.handshake_timeout(Duration)`; `Duration::ZERO` disables it.
+- A failed HELLO or LOGON closes the connection, as the Bolt specification requires.
+- Messages larger than `.max_message_size(bytes)` (default 16 MiB) get a FAILURE and the connection is closed.
+- Before LOGON the limit is `.max_unauthenticated_message_size(bytes)` (default 64 KiB): decoding can multiply a message's size in memory a few hundred times, so this keeps what an unauthenticated client can make the server allocate small.
+- Inside an explicit transaction several results can be open at once: RUN answers with a `qid`, and PULL or DISCARD pick a result with `{"qid": n}`.
+- `.serve_listener(listener)` serves an already bound `tokio::net::TcpListener`, for example one bound to port 0 in tests.
+
 ### Using the Client
 
 Enable the `client` feature:
 
 ```toml
 [dependencies]
-boltr = { version = "0.1", features = ["client"] }
+boltr = { version = "0.2", features = ["client"] }
 ```
 
 ```rust
@@ -102,13 +111,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+Write statements report Neo4j-style counters from the summary `stats`:
+
+```rust
+let result = session.run("CREATE (:Person {name: 'Ada'})").await?;
+let counters = result.counters();
+assert_eq!(counters.nodes_created, 1);
+assert!(counters.contains_updates());
+```
+
 ### WebSocket Transport
 
 Enable the `ws` feature for Bolt-over-WebSocket:
 
 ```toml
 [dependencies]
-boltr = { version = "0.1", features = ["client", "ws"] }
+boltr = { version = "0.2", features = ["client", "ws"] }
 ```
 
 **Client:**
@@ -216,12 +234,12 @@ Application (Cypher statements, parameters, results)
 Enable all:
 
 ```toml
-boltr = { version = "0.1", features = ["client", "ws", "tls"] }
+boltr = { version = "0.2", features = ["client", "ws", "tls"] }
 ```
 
 ## Requirements
 
-- Rust 1.85.0+ (edition 2024)
+- Rust 1.91.0+ (edition 2024)
 
 ## License
 

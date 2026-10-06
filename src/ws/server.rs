@@ -4,12 +4,16 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::time::Instant;
 use tokio_tungstenite::WebSocketStream;
 
 use crate::error::BoltError;
 use crate::server::auth::AuthValidator;
 use crate::server::backend::BoltBackend;
-use crate::server::builder::run_handshake_and_connection;
+use crate::server::builder::{
+    ConnectionContext, DEFAULT_HANDSHAKE_TIMEOUT, DEFAULT_MAX_UNAUTHENTICATED_MESSAGE_SIZE,
+    run_handshake_and_connection,
+};
 use crate::server::session_manager::SessionManager;
 use crate::ws::WsStream;
 
@@ -20,7 +24,9 @@ use crate::ws::WsStream;
 /// handles the Bolt handshake, authentication, and message processing.
 ///
 /// The connection is spawned on the Tokio runtime and this function returns
-/// immediately.
+/// immediately. The client must complete the Bolt handshake and LOGON within
+/// [`DEFAULT_HANDSHAKE_TIMEOUT`] or the connection is closed, and messages
+/// before LOGON are limited to [`DEFAULT_MAX_UNAUTHENTICATED_MESSAGE_SIZE`].
 ///
 /// # Example
 ///
@@ -57,16 +63,17 @@ pub fn accept_ws<S, B>(
     B: BoltBackend,
 {
     let adapted = WsStream::new(ws_stream);
+    let context = ConnectionContext {
+        backend,
+        session_manager,
+        auth_validator,
+        max_message_size,
+        max_unauthenticated_message_size: DEFAULT_MAX_UNAUTHENTICATED_MESSAGE_SIZE,
+        handshake_timeout: Some(DEFAULT_HANDSHAKE_TIMEOUT),
+    };
+    let started = Instant::now();
     tokio::spawn(async move {
-        run_handshake_and_connection(
-            adapted,
-            peer_addr,
-            backend,
-            session_manager,
-            auth_validator,
-            max_message_size,
-        )
-        .await;
+        run_handshake_and_connection(adapted, peer_addr, context, started).await;
     });
 }
 
@@ -74,7 +81,7 @@ pub fn accept_ws<S, B>(
 /// returning only when the connection is closed.
 ///
 /// Unlike [`accept_ws`], this does not spawn a task: the caller controls
-/// the execution context.
+/// the execution context. The same [`DEFAULT_HANDSHAKE_TIMEOUT`] applies.
 pub async fn handle_ws<S, B>(
     ws_stream: WebSocketStream<S>,
     peer_addr: SocketAddr,
@@ -88,14 +95,14 @@ where
     B: BoltBackend,
 {
     let adapted = WsStream::new(ws_stream);
-    run_handshake_and_connection(
-        adapted,
-        peer_addr,
+    let context = ConnectionContext {
         backend,
         session_manager,
         auth_validator,
         max_message_size,
-    )
-    .await;
+        max_unauthenticated_message_size: DEFAULT_MAX_UNAUTHENTICATED_MESSAGE_SIZE,
+        handshake_timeout: Some(DEFAULT_HANDSHAKE_TIMEOUT),
+    };
+    run_handshake_and_connection(adapted, peer_addr, context, Instant::now()).await;
     Ok(())
 }

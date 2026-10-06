@@ -23,21 +23,23 @@ impl<W: AsyncWrite + Unpin> ChunkWriter<W> {
 
     /// Writes a complete message, splitting into chunks if needed,
     /// and appends the `0x0000` terminator.
+    ///
+    /// The framed message is assembled in memory and handed to the underlying
+    /// writer in a single `write_all`, so an unbuffered TCP or TLS stream sees
+    /// one write (one TLS record) per message instead of one per header.
     pub async fn write_message(&mut self, data: &[u8]) -> Result<(), BoltError> {
-        let mut offset = 0;
-        while offset < data.len() {
-            let end = (offset + self.max_chunk_size).min(data.len());
-            let chunk = &data[offset..end];
-            let len = chunk.len() as u16;
-
-            // Write 2-byte length header + chunk data.
-            self.writer.write_all(&len.to_be_bytes()).await?;
-            self.writer.write_all(chunk).await?;
-            offset = end;
+        let chunk_count = data.len().div_ceil(self.max_chunk_size);
+        let mut framed = Vec::with_capacity(data.len() + 2 * chunk_count + 2);
+        for chunk in data.chunks(self.max_chunk_size) {
+            // `max_chunk_size` is 65535, so every chunk length fits in a u16.
+            let len = u16::try_from(chunk.len()).unwrap_or(u16::MAX);
+            framed.extend_from_slice(&len.to_be_bytes());
+            framed.extend_from_slice(chunk);
         }
 
-        // Write terminator.
-        self.writer.write_all(&[0x00, 0x00]).await?;
+        // Terminator.
+        framed.extend_from_slice(&[0x00, 0x00]);
+        self.writer.write_all(&framed).await?;
         Ok(())
     }
 
@@ -45,6 +47,11 @@ impl<W: AsyncWrite + Unpin> ChunkWriter<W> {
     pub async fn flush(&mut self) -> Result<(), BoltError> {
         self.writer.flush().await?;
         Ok(())
+    }
+
+    /// The underlying writer.
+    pub(crate) fn get_mut(&mut self) -> &mut W {
+        &mut self.writer
     }
 }
 
@@ -75,5 +82,64 @@ mod tests {
         writer.write_message(&[]).await.unwrap();
         // Just the terminator.
         assert_eq!(output, vec![0x00, 0x00]);
+    }
+
+    /// Splits `output` into (chunk lengths, payload) and checks the terminator.
+    fn parse_frames(output: &[u8]) -> (Vec<usize>, Vec<u8>) {
+        let mut lengths = Vec::new();
+        let mut payload = Vec::new();
+        let mut pos = 0;
+        loop {
+            let len = usize::from(u16::from_be_bytes([output[pos], output[pos + 1]]));
+            pos += 2;
+            if len == 0 {
+                break;
+            }
+            lengths.push(len);
+            payload.extend_from_slice(&output[pos..pos + len]);
+            pos += len;
+        }
+        assert_eq!(pos, output.len(), "trailing bytes after terminator");
+        (lengths, payload)
+    }
+
+    #[tokio::test]
+    async fn chunk_boundaries_around_65535() {
+        for (size, expected) in [
+            (1usize, vec![1usize]),
+            (65534, vec![65534]),
+            (65535, vec![65535]),
+            (65536, vec![65535, 1]),
+            (131_070, vec![65535, 65535]),
+            (131_071, vec![65535, 65535, 1]),
+        ] {
+            let data: Vec<u8> = (0..size).map(|i| (i % 253) as u8).collect();
+            let mut output = Vec::new();
+            ChunkWriter::new(&mut output)
+                .write_message(&data)
+                .await
+                .unwrap();
+            let (lengths, payload) = parse_frames(&output);
+            assert_eq!(lengths, expected, "size {size}");
+            assert_eq!(payload, data, "size {size}");
+        }
+    }
+
+    #[tokio::test]
+    async fn writer_output_round_trips_through_reader() {
+        use crate::chunk::ChunkReader;
+
+        let messages: Vec<Vec<u8>> = vec![vec![], vec![1, 2, 3], vec![7; 200_000], vec![9]];
+        let mut output = Vec::new();
+        let mut writer = ChunkWriter::new(&mut output);
+        for message in &messages {
+            writer.write_message(message).await.unwrap();
+        }
+        writer.flush().await.unwrap();
+
+        let mut reader = ChunkReader::new(std::io::Cursor::new(output));
+        for message in &messages {
+            assert_eq!(&reader.read_message().await.unwrap()[..], &message[..]);
+        }
     }
 }

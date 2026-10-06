@@ -1,0 +1,42 @@
+[package]
+name = "boltr-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+async-trait = "0.1"
+bytes = "1"
+libfuzzer-sys = "0.4"
+tokio = { version = "1", features = ["io-util", "rt", "time", "macros"] }
+
+[dependencies.boltr]
+path = ".."
+
+# Keep this crate out of any parent workspace.
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "decode_value"
+path = "fuzz_targets/decode_value.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "decode_message"
+path = "fuzz_targets/decode_message.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "server_connection"
+path = "fuzz_targets/server_connection.rs"
+test = false
+doc = false
+bench = false

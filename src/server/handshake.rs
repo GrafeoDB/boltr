@@ -50,6 +50,10 @@ where
 /// Performs the client-side Bolt handshake.
 ///
 /// Sends magic + version proposals, reads the negotiated version.
+///
+/// Fails if the server rejects every proposal, or answers with a version
+/// that was not proposed (which is what a non-Bolt server, for example an
+/// HTTP server, appears to do).
 pub async fn client_handshake<S>(
     stream: &mut S,
     proposals: &[u8; 16],
@@ -57,9 +61,11 @@ pub async fn client_handshake<S>(
 where
     S: AsyncReadExt + AsyncWriteExt + Unpin,
 {
-    // Send magic + proposals.
-    stream.write_all(&BOLT_MAGIC).await?;
-    stream.write_all(proposals).await?;
+    // Send magic + proposals in one write.
+    let mut request = [0u8; 20];
+    request[..4].copy_from_slice(&BOLT_MAGIC);
+    request[4..].copy_from_slice(proposals);
+    stream.write_all(&request).await?;
     stream.flush().await?;
 
     // Read response.
@@ -73,6 +79,13 @@ where
         return Err(BoltError::Protocol(
             "server rejected all proposed versions".into(),
         ));
+    }
+
+    if !version::proposals_cover(proposals, major, minor) {
+        return Err(BoltError::Protocol(format!(
+            "server selected Bolt version {major}.{minor}, which was not proposed \
+             (response {response:02X?}); is this a Bolt server?"
+        )));
     }
 
     Ok((major, minor))
@@ -92,7 +105,7 @@ pub fn default_client_proposals() -> [u8; 16] {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::io::duplex;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt, duplex};
 
     #[tokio::test]
     async fn handshake_success() {
@@ -110,6 +123,99 @@ mod tests {
 
         assert_eq!(server_version, (5, 4));
         assert_eq!(client_version, (5, 4));
+    }
+
+    /// Feeds `input` to `server_handshake` and returns its result and the
+    /// bytes it wrote back.
+    async fn server_handshake_with(input: &[u8]) -> (Result<(u8, u8), BoltError>, Vec<u8>) {
+        let (mut client, mut server) = duplex(256);
+        client.write_all(input).await.unwrap();
+        client.shutdown().await.unwrap();
+        let result = server_handshake(&mut server).await;
+        drop(server);
+        let mut written = Vec::new();
+        client.read_to_end(&mut written).await.unwrap();
+        (result, written)
+    }
+
+    #[tokio::test]
+    async fn server_rejects_bad_magic_without_answering() {
+        let mut input = b"GET / HTTP/1.1".to_vec();
+        input.resize(20, 0);
+        let (result, written) = server_handshake_with(&input).await;
+        assert!(result.unwrap_err().to_string().contains("magic"));
+        assert!(written.is_empty());
+    }
+
+    #[tokio::test]
+    async fn server_handles_truncated_handshakes() {
+        let mut full = BOLT_MAGIC.to_vec();
+        full.extend_from_slice(&default_client_proposals());
+        for len in 0..full.len() {
+            let (result, written) = server_handshake_with(&full[..len]).await;
+            assert!(
+                matches!(result, Err(BoltError::Io(_))),
+                "len {len}: {result:?}"
+            );
+            assert!(written.is_empty(), "len {len}");
+        }
+    }
+
+    #[tokio::test]
+    async fn server_answers_garbage_versions_with_no_version() {
+        let mut input = BOLT_MAGIC.to_vec();
+        input.extend_from_slice(&[0xDE, 0xAD, 0xBE, 0xEF].repeat(4));
+        let (result, written) = server_handshake_with(&input).await;
+        assert!(result.is_err());
+        assert_eq!(written, version::NO_VERSION);
+    }
+
+    #[tokio::test]
+    async fn server_picks_version_from_later_slot() {
+        let mut input = BOLT_MAGIC.to_vec();
+        // 4.4, 3.0, 5.2, empty.
+        input.extend_from_slice(&[0, 0, 4, 4, 0, 0, 0, 3, 0, 0, 2, 5, 0, 0, 0, 0]);
+        let (result, written) = server_handshake_with(&input).await;
+        assert_eq!(result.unwrap(), (5, 2));
+        assert_eq!(written, version::encode_version(5, 2));
+    }
+
+    /// Regression: the client accepted any non-zero answer as the negotiated
+    /// version, so connecting to a non-Bolt port "succeeded" and failed later
+    /// with confusing decode errors.
+    #[tokio::test]
+    async fn client_rejects_unproposed_versions() {
+        for response in [*b"HTTP", [0, 0, 0, 4], [0, 0, 5, 5], [0, 0, 0, 5]] {
+            let (mut client, mut server) = duplex(256);
+            let server_task = tokio::spawn(async move {
+                let mut request = [0u8; 20];
+                server.read_exact(&mut request).await.unwrap();
+                server.write_all(&response).await.unwrap();
+                server
+            });
+            let result = client_handshake(&mut client, &default_client_proposals()).await;
+            assert!(result.is_err(), "{response:02X?} accepted: {result:?}");
+            drop(server_task.await.unwrap());
+        }
+    }
+
+    #[tokio::test]
+    async fn client_accepts_every_proposed_version() {
+        for minor in 1..=4u8 {
+            let (mut client, mut server) = duplex(256);
+            let server_task = tokio::spawn(async move {
+                let mut request = [0u8; 20];
+                server.read_exact(&mut request).await.unwrap();
+                server
+                    .write_all(&version::encode_version(5, minor))
+                    .await
+                    .unwrap();
+                server
+            });
+            let result = client_handshake(&mut client, &default_client_proposals()).await;
+            assert_eq!(result.unwrap(), (5, minor));
+            drop(server_task.await.unwrap());
+        }
     }
 
     #[tokio::test]

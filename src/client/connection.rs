@@ -70,17 +70,28 @@ impl BoltConnection {
         self.version
     }
 
-    /// Sends a client message.
+    /// Sends a client message and flushes it to the transport.
+    ///
+    /// Flushing matters for buffered transports: the WebSocket adapter only
+    /// emits a frame on flush, so an unflushed message would never leave.
     pub async fn send(&mut self, msg: &ClientMessage) -> Result<(), BoltError> {
         let mut buf = BytesMut::new();
         encode_client_message(&mut buf, msg);
-        self.writer.write_message(&buf).await
+        self.writer.write_message(&buf).await?;
+        self.writer.flush().await
     }
 
     /// Receives a server message.
+    ///
+    /// NOOP keep-alive chunks (empty messages, which servers such as Neo4j
+    /// send during long-running queries) are skipped.
     pub async fn recv(&mut self) -> Result<ServerMessage, BoltError> {
-        let data = self.reader.read_message().await?;
-        decode_server_message(&data)
+        loop {
+            let data = self.reader.read_message().await?;
+            if !data.is_empty() {
+                return decode_server_message(&data);
+            }
+        }
     }
 
     /// Sends HELLO and expects SUCCESS.

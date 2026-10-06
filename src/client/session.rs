@@ -7,6 +7,17 @@ use crate::error::BoltError;
 use crate::types::{BoltDict, BoltValue};
 
 use super::connection::BoltConnection;
+use super::counters::Counters;
+
+/// User agent sent in HELLO by [`BoltSession`].
+const USER_AGENT: &str = concat!("boltr-client/", env!("CARGO_PKG_VERSION"));
+
+fn hello_extra() -> BoltDict {
+    BoltDict::from([(
+        "user_agent".to_string(),
+        BoltValue::String(USER_AGENT.to_string()),
+    )])
+}
 
 /// A high-level Bolt session that handles connection, authentication,
 /// and provides a convenient query API.
@@ -40,11 +51,7 @@ impl BoltSession {
     /// Connects and authenticates (HELLO + LOGON with "none" scheme).
     pub async fn connect(addr: SocketAddr) -> Result<Self, BoltError> {
         let mut conn = BoltConnection::connect(addr).await?;
-        let extra = BoltDict::from([(
-            "user_agent".to_string(),
-            BoltValue::String("boltr-client/0.2.0".to_string()),
-        )]);
-        conn.hello(extra).await?;
+        conn.hello(hello_extra()).await?;
         conn.logon("none", None, None).await?;
         Ok(Self { conn })
     }
@@ -55,11 +62,7 @@ impl BoltSession {
     #[cfg(feature = "ws")]
     pub async fn connect_ws(url: &str) -> Result<Self, BoltError> {
         let mut conn = BoltConnection::connect_ws(url).await?;
-        let extra = BoltDict::from([(
-            "user_agent".to_string(),
-            BoltValue::String("boltr-client/0.2.0".to_string()),
-        )]);
-        conn.hello(extra).await?;
+        conn.hello(hello_extra()).await?;
         conn.logon("none", None, None).await?;
         Ok(Self { conn })
     }
@@ -74,11 +77,7 @@ impl BoltSession {
         password: &str,
     ) -> Result<Self, BoltError> {
         let mut conn = BoltConnection::connect_ws(url).await?;
-        let extra = BoltDict::from([(
-            "user_agent".to_string(),
-            BoltValue::String("boltr-client/0.2.0".to_string()),
-        )]);
-        conn.hello(extra).await?;
+        conn.hello(hello_extra()).await?;
         conn.logon("basic", Some(username), Some(password)).await?;
         Ok(Self { conn })
     }
@@ -90,11 +89,7 @@ impl BoltSession {
         password: &str,
     ) -> Result<Self, BoltError> {
         let mut conn = BoltConnection::connect(addr).await?;
-        let extra = BoltDict::from([(
-            "user_agent".to_string(),
-            BoltValue::String("boltr-client/0.2.0".to_string()),
-        )]);
-        conn.hello(extra).await?;
+        conn.hello(hello_extra()).await?;
         conn.logon("basic", Some(username), Some(password)).await?;
         Ok(Self { conn })
     }
@@ -192,4 +187,23 @@ pub struct QueryResult {
     pub records: Vec<Vec<BoltValue>>,
     /// Summary metadata from the final PULL SUCCESS.
     pub summary: BoltDict,
+}
+
+impl QueryResult {
+    /// The write counters from the summary's `stats` entry (all zero for a
+    /// statement that did not write).
+    ///
+    /// ```rust,no_run
+    /// # async fn example(session: &mut boltr::client::BoltSession) -> Result<(), boltr::BoltError> {
+    /// let result = session.run("CREATE (:Person {name: 'Ada'})").await?;
+    /// let counters = result.counters();
+    /// assert_eq!(counters.nodes_created, 1);
+    /// assert!(counters.contains_updates());
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[must_use]
+    pub fn counters(&self) -> Counters {
+        Counters::from_summary(&self.summary)
+    }
 }

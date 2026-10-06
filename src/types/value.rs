@@ -73,6 +73,36 @@ impl BoltValue {
             _ => None,
         }
     }
+
+    /// Returns the Bolt type name of this value (for example `"Integer"`).
+    ///
+    /// Used in decode error messages so that a malformed value is described
+    /// by its type rather than by its (possibly very large) contents.
+    pub(crate) fn type_name(&self) -> &'static str {
+        match self {
+            Self::Null => "Null",
+            Self::Boolean(_) => "Boolean",
+            Self::Integer(_) => "Integer",
+            Self::Float(_) => "Float",
+            Self::String(_) => "String",
+            Self::Bytes(_) => "Bytes",
+            Self::List(_) => "List",
+            Self::Dict(_) => "Dictionary",
+            Self::Node(_) => "Node",
+            Self::Relationship(_) => "Relationship",
+            Self::UnboundRelationship(_) => "UnboundRelationship",
+            Self::Path(_) => "Path",
+            Self::Date(_) => "Date",
+            Self::Time(_) => "Time",
+            Self::LocalTime(_) => "LocalTime",
+            Self::DateTime(_) => "DateTime",
+            Self::DateTimeZoneId(_) => "DateTimeZoneId",
+            Self::LocalDateTime(_) => "LocalDateTime",
+            Self::Duration(_) => "Duration",
+            Self::Point2D(_) => "Point2D",
+            Self::Point3D(_) => "Point3D",
+        }
+    }
 }
 
 // -- Graph structures --

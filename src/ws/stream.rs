@@ -58,39 +58,46 @@ where
             return Poll::Ready(Ok(()));
         }
 
-        // Poll the WebSocket for the next message.
-        match Pin::new(&mut this.inner).poll_next(cx) {
-            Poll::Ready(Some(Ok(msg))) => match msg {
-                Message::Binary(data) => {
-                    let to_copy = data.len().min(buf.remaining());
-                    buf.put_slice(&data[..to_copy]);
-                    if to_copy < data.len() {
-                        this.read_buf.extend_from_slice(&data[to_copy..]);
+        // Poll the WebSocket until a message yields bytes, the stream ends,
+        // or no message is ready.
+        loop {
+            match Pin::new(&mut this.inner).poll_next(cx) {
+                Poll::Ready(Some(Ok(msg))) => match msg {
+                    Message::Binary(data) => {
+                        if data.is_empty() {
+                            // Returning without filling `buf` would read as
+                            // EOF, so skip frames that carry no bytes.
+                            continue;
+                        }
+                        let to_copy = data.len().min(buf.remaining());
+                        buf.put_slice(&data[..to_copy]);
+                        if to_copy < data.len() {
+                            this.read_buf.extend_from_slice(&data[to_copy..]);
+                        }
+                        return Poll::Ready(Ok(()));
                     }
-                    Poll::Ready(Ok(()))
+                    Message::Close(_) => {
+                        this.read_closed = true;
+                        return Poll::Ready(Ok(()));
+                    }
+                    // Ping/pong are answered by tungstenite; keep reading.
+                    Message::Ping(_) | Message::Pong(_) | Message::Frame(_) => {}
+                    Message::Text(_) => {
+                        return Poll::Ready(Err(io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            "Bolt requires binary WebSocket frames, received text",
+                        )));
+                    }
+                },
+                Poll::Ready(Some(Err(e))) => {
+                    return Poll::Ready(Err(io::Error::new(io::ErrorKind::ConnectionAborted, e)));
                 }
-                Message::Close(_) => {
+                Poll::Ready(None) => {
                     this.read_closed = true;
-                    Poll::Ready(Ok(()))
+                    return Poll::Ready(Ok(()));
                 }
-                Message::Ping(_) | Message::Pong(_) | Message::Frame(_) => {
-                    // Ping/pong handled by tungstenite; wake to poll again.
-                    cx.waker().wake_by_ref();
-                    Poll::Pending
-                }
-                Message::Text(_) => Poll::Ready(Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "Bolt requires binary WebSocket frames, received text",
-                ))),
-            },
-            Poll::Ready(Some(Err(e))) => {
-                Poll::Ready(Err(io::Error::new(io::ErrorKind::ConnectionAborted, e)))
+                Poll::Pending => return Poll::Pending,
             }
-            Poll::Ready(None) => {
-                this.read_closed = true;
-                Poll::Ready(Ok(()))
-            }
-            Poll::Pending => Poll::Pending,
         }
     }
 }
@@ -245,6 +252,47 @@ mod tests {
         let err = result.unwrap_err();
         assert_eq!(err.kind(), io::ErrorKind::InvalidData);
         assert!(err.to_string().contains("binary"));
+    }
+
+    /// Regression: an empty binary frame filled no bytes, which `read_exact`
+    /// reported as an unexpected EOF and the server treated as a disconnect.
+    #[tokio::test]
+    async fn empty_binary_frames_are_skipped() {
+        let (mut ws, mut server) = ws_pair().await;
+
+        server
+            .send(Message::Binary(Vec::new().into()))
+            .await
+            .unwrap();
+        server.send(Message::Ping(vec![1].into())).await.unwrap();
+        server
+            .send(Message::Binary(Vec::new().into()))
+            .await
+            .unwrap();
+        server
+            .send(Message::Binary(vec![0x10, 0x20].into()))
+            .await
+            .unwrap();
+
+        let mut buf = [0u8; 2];
+        ws.read_exact(&mut buf).await.unwrap();
+        assert_eq!(buf, [0x10, 0x20]);
+    }
+
+    #[tokio::test]
+    async fn bolt_message_split_across_frames() {
+        let (mut ws, mut server) = ws_pair().await;
+
+        // One chunked Bolt message (RESET) delivered byte by byte.
+        for byte in [0x00u8, 0x02, 0xB0, 0x0F, 0x00, 0x00] {
+            server
+                .send(Message::Binary(vec![byte].into()))
+                .await
+                .unwrap();
+        }
+        let mut reader = crate::chunk::ChunkReader::new(&mut ws);
+        let msg = reader.read_message().await.unwrap();
+        assert_eq!(&msg[..], &[0xB0, 0x0F]);
     }
 
     #[tokio::test]
