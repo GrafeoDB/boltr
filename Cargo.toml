@@ -1,6 +1,6 @@
 [package]
 name = "boltr"
-version = "0.2.1"
+version = "0.3.0"
 edition = "2024"
 rust-version = "1.91.0"
 license = "MIT OR Apache-2.0"
@@ -9,7 +9,7 @@ description = "Pure-Rust Bolt v5.x wire protocol library"
 readme = "README.md"
 keywords = ["bolt", "neo4j", "graph-database", "protocol"]
 categories = ["database", "network-programming"]
-exclude = [".claude/", ".github/", "target/", "fuzz/"]
+exclude = [".claude/", ".github/", "target/", "fuzz/", "tests/drivers/"]
 
 [dependencies]
 async-trait = "0.1.92"
@@ -34,7 +34,7 @@ version = "1.9"
 optional = true
 
 [dependencies.tokio-tungstenite]
-version = "0.26"
+version = "0.30"
 optional = true
 
 [dependencies.futures-util]
