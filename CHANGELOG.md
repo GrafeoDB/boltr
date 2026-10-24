@@ -17,6 +17,7 @@ Behavior that servers and clients built on 0.2 will notice. Each item is describ
 - Messages before LOGON are limited to 64 KiB (`max_unauthenticated_message_size`).
 - `ConnectionState::transition_failure` returns `Defunct` for any failure before authentication, and `transition_success` no longer maps RESET to `Ready` from `Negotiation` or `Authentication`.
 - Client: the handshake fails unless the server answers with one of the proposed versions.
+- `ws` feature: `tokio-tungstenite` 0.30 (was 0.26). `WsStream::new`, `ws::server::handle_ws` and `From<tungstenite::Error>` take the 0.30 types, so applications that build the `WebSocketStream` themselves need `tokio-tungstenite` 0.30 too.
 
 ### Security
 - **Authentication bypass**: a failed LOGON (or a failed HELLO, or an undecodable message before LOGON) moved the connection to `Failed`, from which RESET reached `Ready` without authenticating, so a client with wrong credentials could run queries. Any failure before authentication now closes the connection (`Defunct`), as the Bolt specification requires, and the connection also tracks on its own whether LOGON succeeded before dispatching any other message.
@@ -68,6 +69,7 @@ Behavior that servers and clients built on 0.2 will notice. Each item is describ
 
 ### Dependencies
 - Raised minimums: `tokio` 1.44.2 (RUSTSEC-2025-0023), `bytes` 1.11.1 (RUSTSEC-2026-0007), `tracing` 0.1.40 (RUSTSEC-2023-0078), `rustls-pki-types` 1.9 (first release with the `pem` API used for TLS) and `async-trait` 0.1.92 (older expansions fail clippy `double_must_use` on recent Rust). MSRV unchanged (1.91.0).
+- `tokio-tungstenite` 0.30 (was 0.26, see Breaking).
 - Lockfile refreshed: `rustls` 0.23.46 and `rustls-webpki` 0.103.16 clear RUSTSEC-2026-0098, 0099, 0104, 0285, 0346, 0348, 0349 and 0382; `tokio` 1.54.1 replaces the yanked 1.54.0 (RUSTSEC-2026-0384, a race in `tokio::time::Interval`). Applications get these through their own lockfile.
 - CI: GitHub Actions updated (`actions/checkout` v7, `codecov/codecov-action` v7).
 
