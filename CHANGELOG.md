@@ -5,7 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.1] - Unreleased
+## [0.3.0] - Unreleased
+
+### Breaking
+Behavior that servers and clients built on 0.2 will notice. Each item is described in full below.
+
+- Any failure before authentication (a failed HELLO or LOGON, or an undecodable message) closes the connection. Before, the connection went to `Failed` and a RESET recovered it.
+- Messages that are not valid in the current state are answered with FAILURE instead of IGNORED.
+- PULL and DISCARD reject `n = 0` and non-integer `n`, and DISCARD honours `n` instead of discarding everything.
+- Connections that do not complete the handshake, HELLO and LOGON within 30 s are closed (`handshake_timeout`, `Duration::ZERO` disables it).
+- Messages before LOGON are limited to 64 KiB (`max_unauthenticated_message_size`).
+- `ConnectionState::transition_failure` returns `Defunct` for any failure before authentication, and `transition_success` no longer maps RESET to `Ready` from `Negotiation` or `Authentication`.
+- Client: the handshake fails unless the server answers with one of the proposed versions.
 
 ### Security
 - **Authentication bypass**: a failed LOGON (or a failed HELLO, or an undecodable message before LOGON) moved the connection to `Failed`, from which RESET reached `Ready` without authenticating, so a client with wrong credentials could run queries. Any failure before authentication now closes the connection (`Defunct`), as the Bolt specification requires, and the connection also tracks on its own whether LOGON succeeded before dispatching any other message.
@@ -45,6 +56,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `version::proposals_cover()` and `packstream::decode::MAX_NESTING_DEPTH`.
 - Tests: PackStream property tests (proptest) over every value type and message, exact wire bytes at every integer and size boundary, chunk framing at the 65535 byte limit, state machine transitions for every state, and end-to-end tests of full sessions over TCP, WebSocket and TLS (certificate generated with rcgen), including interleaved results by `qid`, malformed input, disconnects, timeouts and the regressions above. A counting allocator checks the memory an unauthenticated client can cause.
 - A cargo-fuzz harness in `fuzz/` (PackStream values, messages, server connection). It is not run in CI.
+- The `driver_server` example (a minimal backend for testing official drivers) and a CI job that reads several open results in one transaction past the fetch size with the neo4j Python driver 6.1.0 (`tests/drivers/python/multiple_results.py`, run with `uv run`): PULL and DISCARD by `qid`, then COMMIT, and ROLLBACK with results open.
 
 ### Changed
 - `ConnectionState::transition_failure` returns `Defunct` for any failure before authentication, and `transition_success` no longer maps RESET to `Ready` from `Negotiation` or `Authentication`.
@@ -56,7 +68,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Dependencies
 - Raised minimums: `tokio` 1.44.2 (RUSTSEC-2025-0023), `bytes` 1.11.1 (RUSTSEC-2026-0007), `tracing` 0.1.40 (RUSTSEC-2023-0078), `rustls-pki-types` 1.9 (first release with the `pem` API used for TLS) and `async-trait` 0.1.92 (older expansions fail clippy `double_must_use` on recent Rust). MSRV unchanged (1.91.0).
-- Lockfile refreshed: `rustls` 0.23.46 and `rustls-webpki` 0.103.16 clear RUSTSEC-2026-0098, 0099, 0104, 0285, 0346, 0348, 0349 and 0382. Applications get these through their own lockfile.
+- Lockfile refreshed: `rustls` 0.23.46 and `rustls-webpki` 0.103.16 clear RUSTSEC-2026-0098, 0099, 0104, 0285, 0346, 0348, 0349 and 0382; `tokio` 1.54.1 replaces the yanked 1.54.0 (RUSTSEC-2026-0384, a race in `tokio::time::Interval`). Applications get these through their own lockfile.
 - CI: GitHub Actions updated (`actions/checkout` v7, `codecov/codecov-action` v7).
 
 ## [0.2.0] - 2026-04-11
@@ -139,7 +151,7 @@ Initial release.
 - CI pipeline: formatting, clippy, tests (Linux/Windows/macOS), coverage, and security audit.
 - Dual-licensed under MIT and Apache-2.0.
 
-[0.2.1]: https://github.com/GrafeoDB/boltr/compare/v0.2.0...v0.2.1
+[0.3.0]: https://github.com/GrafeoDB/boltr/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/GrafeoDB/boltr/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/GrafeoDB/boltr/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/GrafeoDB/boltr/compare/v0.1.0...v0.1.1
