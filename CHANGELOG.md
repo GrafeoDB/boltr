@@ -54,6 +54,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The server moves records out of the buffered result on PULL instead of cloning them.
 - The client HELLO user agent is `boltr-client/<crate version>` (it was hard-coded to `0.2.0`).
 
+### Dependencies
+- Raised minimums: `tokio` 1.44.2 (RUSTSEC-2025-0023), `bytes` 1.11.1 (RUSTSEC-2026-0007), `tracing` 0.1.40 (RUSTSEC-2023-0078), `rustls-pki-types` 1.9 (first release with the `pem` API used for TLS) and `async-trait` 0.1.92 (older expansions fail clippy `double_must_use` on recent Rust). MSRV unchanged (1.91.0).
+- Lockfile refreshed: `rustls` 0.23.46 and `rustls-webpki` 0.103.16 clear RUSTSEC-2026-0098, 0099, 0104, 0285, 0346, 0348, 0349 and 0382. Applications get these through their own lockfile.
+- CI: GitHub Actions updated (`actions/checkout` v7, `codecov/codecov-action` v7).
+
 ## [0.2.0] - 2026-04-11
 
 ### Added
