@@ -57,6 +57,24 @@ jobs:
       - name: Test (release)
         run: cargo test --all-features --release
 
+  drivers:
+    name: Python driver
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: astral-sh/setup-uv@v10.3.2
+
+      - name: Build the test server
+        run: cargo build --example driver_server
+
+      - name: Several results per transaction (neo4j 6.1.0)
+        run: uv run tests/drivers/python/multiple_results.py
+
   coverage:
     name: Coverage
     runs-on: ubuntu-latest

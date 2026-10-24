@@ -23,7 +23,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-boltr = "0.2"
+boltr = "0.3"
 ```
 
 ### Implementing a Backend
@@ -88,7 +88,7 @@ Enable the `client` feature:
 
 ```toml
 [dependencies]
-boltr = { version = "0.2", features = ["client"] }
+boltr = { version = "0.3", features = ["client"] }
 ```
 
 ```rust
@@ -126,7 +126,7 @@ Enable the `ws` feature for Bolt-over-WebSocket:
 
 ```toml
 [dependencies]
-boltr = { version = "0.2", features = ["client", "ws"] }
+boltr = { version = "0.3", features = ["client", "ws"] }
 ```
 
 **Client:**
@@ -234,7 +234,7 @@ Application (Cypher statements, parameters, results)
 Enable all:
 
 ```toml
-boltr = { version = "0.2", features = ["client", "ws", "tls"] }
+boltr = { version = "0.3", features = ["client", "ws", "tls"] }
 ```
 
 ## Requirements
