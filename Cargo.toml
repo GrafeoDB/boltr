@@ -12,11 +12,11 @@ categories = ["database", "network-programming"]
 exclude = [".claude/", ".github/", "target/", "fuzz/"]
 
 [dependencies]
-async-trait = "0.1"
-bytes = "1"
+async-trait = "0.1.92"
+bytes = "1.11.1"
 thiserror = "2"
-tokio = { version = "1", features = ["net", "io-util", "rt", "sync", "time", "macros"] }
-tracing = "0.1"
+tokio = { version = "1.44.2", features = ["net", "io-util", "rt", "sync", "time", "macros"] }
+tracing = "0.1.40"
 uuid = { version = "1", features = ["v4"] }
 
 [features]
@@ -30,7 +30,7 @@ version = "0.26"
 optional = true
 
 [dependencies.rustls-pki-types]
-version = "1"
+version = "1.9"
 optional = true
 
 [dependencies.tokio-tungstenite]
@@ -46,5 +46,5 @@ features = ["sink"]
 [dev-dependencies]
 proptest = { version = "1", default-features = false, features = ["std"] }
 rcgen = { version = "0.14", default-features = false, features = ["aws_lc_rs", "pem"] }
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1.44.2", features = ["full"] }
 
