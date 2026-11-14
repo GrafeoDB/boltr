@@ -2,6 +2,14 @@
 
 All notable changes to BoltR, a pure Rust implementation of the Bolt v5.x wire protocol (server framework and client).
 
+## [0.3.1] - 2026-11-14
+
+Dependency release: no behaviour change, so every 0.3.0 user can upgrade in place.
+
+### Dependencies
+
+- **Semver-compatible updates**: uuid 1.29.2, syn 3.0.10 (through thiserror and tokio-macros), aws-lc-rs 1.19 (through rustls and rcgen), log 0.4.35 and wasm-bindgen 0.2.130.
+
 ## [0.3.0] - 2026-10-24
 
 Security release: closes an authentication bypass through RESET after a failed LOGON, a process abort on deeply nested values and a memory exhaustion before authentication, so every server on 0.2 should upgrade. Servers and clients built on 0.2 notice that any failure before authentication closes the connection, invalid messages get FAILURE instead of IGNORED, PULL and DISCARD refuse `n = 0`, a connection must authenticate within 30 s (`handshake_timeout`) and messages before LOGON are capped at 64 KiB (`max_unauthenticated_message_size`). The `ws` feature moves to `tokio-tungstenite` 0.30, and the client refuses a handshake answer with a version it did not propose.
