@@ -8,7 +8,7 @@ Any Bolt-compatible database engine can plug in via the `BoltBackend` trait. Bol
 
 - **Spec-faithful:** Full Bolt v5.x protocol (5.1-5.4), all PackStream types, all message types
 - **Pure Rust:** No C/C++ dependencies
-- **Lightweight:** Minimal deps: tokio, bytes, thiserror, tracing
+- **Lightweight:** Minimal deps: tokio, bytes, thiserror, tracing, async-trait, uuid
 - **Fast:** Efficient PackStream encoding, chunked streaming
 - **Embeddable:** Library-first design, usable by any Rust project
 - **WebSocket:** Optional Bolt-over-WebSocket via `ws` feature flag (tokio-tungstenite)
