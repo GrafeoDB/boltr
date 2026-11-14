@@ -239,7 +239,7 @@ boltr = { version = "0.3", features = ["client", "ws", "tls"] }
 
 ## Requirements
 
-- Rust 1.91.0+ (edition 2024)
+- Rust 1.100.0+ (edition 2024)
 
 ## License
 
