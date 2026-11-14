@@ -1796,6 +1796,48 @@ async fn zero_idle_timeout_does_not_panic_the_reaper() {
 }
 
 // ---------------------------------------------------------------------------
+// Latency (issue #8)
+// ---------------------------------------------------------------------------
+
+/// Round trips the latency tests time. With Nagle's algorithm on the server's
+/// socket, the second small write of an exchange waits for the client's delayed
+/// ACK, so each round trip takes 40 ms or more; without it, well under 1 ms.
+const ROUND_TRIPS: u32 = 20;
+
+/// The most a round trip may take on average: far above a loopback round trip
+/// (debug build, slow CI), far below a delayed ACK.
+const MAX_ROUND_TRIP: Duration = Duration::from_millis(15);
+
+#[tokio::test]
+async fn round_trips_do_not_wait_for_delayed_acks() {
+    let (addr, _backend) = start_default_server().await;
+    // As the official drivers do: the client turns Nagle off on its side, which
+    // does not help with the server's writes.
+    let mut stream = TcpStream::connect(addr).await.unwrap();
+    stream.set_nodelay(true).unwrap();
+    client_handshake(&mut stream, &default_client_proposals())
+        .await
+        .unwrap();
+    let mut client = RawClient::from_stream(stream);
+    client.send(&hello()).await;
+    client.success().await;
+    client.send(&logon_none()).await;
+    client.success().await;
+    client.query("ROWS 1").await; // warm up
+
+    let started = std::time::Instant::now();
+    for _ in 0..ROUND_TRIPS {
+        let (records, _) = client.query("ROWS 1").await;
+        assert_eq!(records.len(), 1);
+    }
+    let average = started.elapsed() / ROUND_TRIPS;
+    assert!(
+        average < MAX_ROUND_TRIP,
+        "RUN + PULL took {average:?} on average (the server's writes wait for delayed ACKs)"
+    );
+}
+
+// ---------------------------------------------------------------------------
 // High-level client
 // ---------------------------------------------------------------------------
 
@@ -1803,6 +1845,26 @@ async fn zero_idle_timeout_does_not_panic_the_reaper() {
 mod client_api {
     use super::*;
     use boltr::client::{BoltConnection, BoltSession, Counters};
+
+    #[tokio::test]
+    async fn bolt_session_round_trips_do_not_wait_for_delayed_acks() {
+        let (addr, _backend) = start_default_server().await;
+        let mut session = BoltSession::connect(addr).await.unwrap();
+        let warm_up = session.run("ROWS 1").await.unwrap();
+        assert_eq!(warm_up.records.len(), 1);
+
+        let started = std::time::Instant::now();
+        for _ in 0..ROUND_TRIPS {
+            let result = session.run("ROWS 1").await.unwrap();
+            assert_eq!(result.records.len(), 1);
+        }
+        let average = started.elapsed() / ROUND_TRIPS;
+        assert!(
+            average < MAX_ROUND_TRIP,
+            "BoltSession::run took {average:?} on average (writes wait for delayed ACKs)"
+        );
+        session.close().await.unwrap();
+    }
 
     #[tokio::test]
     async fn bolt_session_full_flow() {

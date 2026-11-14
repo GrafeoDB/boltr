@@ -370,6 +370,19 @@ async fn with_deadline<F: Future>(deadline: Option<Instant>, future: F) -> Optio
     }
 }
 
+/// Turns Nagle's algorithm off on an accepted socket.
+///
+/// A connection writes each Bolt message on its own (a RUN's SUCCESS, then a
+/// PULL's records and its SUCCESS). With Nagle on, the second small write waits
+/// until the client acknowledges the first, and clients delay that ACK by up to
+/// 40 ms, so every round trip took 40 ms or more (issue #8). Set before TLS or a
+/// WebSocket wraps the stream; a failure only costs latency, so it is logged.
+fn disable_nagle(stream: &TcpStream, peer_addr: SocketAddr) {
+    if let Err(e) = stream.set_nodelay(true) {
+        tracing::debug!(%peer_addr, error = %e, "could not set TCP_NODELAY");
+    }
+}
+
 fn spawn_connection<B: BoltBackend>(
     stream: TcpStream,
     peer_addr: SocketAddr,
@@ -377,6 +390,7 @@ fn spawn_connection<B: BoltBackend>(
     transport: Transport,
     #[cfg(feature = "tls")] tls_acceptor: Option<TlsAcceptor>,
 ) {
+    disable_nagle(&stream, peer_addr);
     tokio::spawn(async move {
         let started = Instant::now();
 
@@ -472,5 +486,22 @@ pub(crate) async fn run_handshake_and_connection<S, B>(
     }
     if let Err(e) = conn.run().await {
         tracing::debug!(%peer_addr, error = %e, "Bolt connection closed");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn accepted_sockets_have_nagle_off() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let _client = TcpStream::connect(addr).await.unwrap();
+        let (stream, peer_addr) = listener.accept().await.unwrap();
+        assert!(!stream.nodelay().unwrap(), "sockets start with Nagle on");
+
+        disable_nagle(&stream, peer_addr);
+        assert!(stream.nodelay().unwrap());
     }
 }

@@ -32,6 +32,9 @@ impl BoltConnection {
     /// a connection ready for HELLO/LOGON.
     pub async fn connect(addr: SocketAddr) -> Result<Self, BoltError> {
         let mut stream = TcpStream::connect(addr).await?;
+        // The client writes small messages back to back (RUN, then PULL); with
+        // Nagle on, the second waits for the server's delayed ACK (issue #8).
+        stream.set_nodelay(true)?;
 
         let proposals = default_client_proposals();
         let version = client_handshake(&mut stream, &proposals).await?;
