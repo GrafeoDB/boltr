@@ -4,7 +4,11 @@ All notable changes to BoltR, a pure Rust implementation of the Bolt v5.x wire p
 
 ## [0.3.1] - 2026-11-14
 
-Dependency release: no behaviour change, so every 0.3.0 user can upgrade in place.
+Latency release: a Bolt round trip no longer waits about 40 ms for a delayed ACK, and dependencies are updated. Nothing else changes, so every 0.3.0 user can upgrade in place.
+
+### Fixed
+
+- **Round trips take under a millisecond again, not 40 ms or more** ([#8](https://github.com/GrafeoDB/boltr/issues/8)): the server sets `TCP_NODELAY` on every accepted socket (before TLS or WebSocket) and `BoltConnection::connect` sets it on its own, so the second small write of an exchange no longer waits for the peer's delayed ACK. Measured on Linux: 41 ms per RUN and PULL before, well under 15 ms after (the new latency tests).
 
 ### Dependencies
 
