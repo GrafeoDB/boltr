@@ -2,6 +2,14 @@
 
 All notable changes to BoltR, a pure Rust implementation of the Bolt v5.x wire protocol (server framework and client).
 
+## [0.4.0] - Unreleased
+
+Toolchain release: BoltR needs Rust 1.100 or newer to build; stay on 0.3.1 for an older Rust.
+
+### Changed
+
+- **Rust 1.100 is the minimum** (was 1.91): `rust-version = "1.100.0"`, the same as grafeo, grafeo-server and gwp for their next releases.
+
 ## [0.3.1] - 2026-11-14
 
 Latency release: a Bolt round trip no longer waits about 40 ms for a delayed ACK, and dependencies are updated. Nothing else changes, so every 0.3.0 user can upgrade in place.
