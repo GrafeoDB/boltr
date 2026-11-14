@@ -500,7 +500,8 @@ where
                     .and_then(|v| v.as_str())
                     .map(String::from),
             };
-            Some(validator.validate(&creds).await?)
+            let context = crate::server::auth::AuthContext::new(self.peer_addr);
+            Some(validator.validate(&creds, &context).await?)
         } else {
             None
         };

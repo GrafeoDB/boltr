@@ -8,7 +8,7 @@ pub mod handshake;
 pub mod session_manager;
 pub mod state_machine;
 
-pub use auth::{AuthInfo, AuthValidator};
+pub use auth::{AuthContext, AuthInfo, AuthValidator};
 pub use backend::{
     AccessMode, AuthCredentials, BoltBackend, BoltRecord, ResultMetadata, ResultStream,
     RoutingServer, RoutingTable, SessionConfig, SessionHandle, SessionProperty, TransactionHandle,

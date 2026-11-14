@@ -24,9 +24,9 @@ use boltr::message::encode::encode_client_message;
 use boltr::message::{ClientMessage, ServerMessage};
 use boltr::server::handshake::{client_handshake, default_client_proposals};
 use boltr::server::{
-    AuthCredentials, AuthInfo, AuthValidator, BoltBackend, BoltRecord, BoltServer, ResultMetadata,
-    ResultStream, RoutingServer, RoutingTable, SessionConfig, SessionHandle, SessionProperty,
-    TransactionHandle,
+    AuthContext, AuthCredentials, AuthInfo, AuthValidator, BoltBackend, BoltRecord, BoltServer,
+    ResultMetadata, ResultStream, RoutingServer, RoutingTable, SessionConfig, SessionHandle,
+    SessionProperty, TransactionHandle,
 };
 use boltr::types::{
     BoltDate, BoltDateTime, BoltDateTimeZoneId, BoltDict, BoltDuration, BoltLocalDateTime,
@@ -285,7 +285,11 @@ struct PasswordValidator;
 
 #[async_trait::async_trait]
 impl AuthValidator for PasswordValidator {
-    async fn validate(&self, credentials: &AuthCredentials) -> Result<AuthInfo, BoltError> {
+    async fn validate(
+        &self,
+        credentials: &AuthCredentials,
+        _context: &AuthContext,
+    ) -> Result<AuthInfo, BoltError> {
         match (
             credentials.scheme.as_str(),
             credentials.principal.as_deref(),
@@ -905,6 +909,70 @@ async fn basic_auth_success_reaches_the_backend() {
     let (records, _) = client.query("WHOAMI").await;
     assert_eq!(records, vec![vec![BoltValue::String("ada".into())]]);
     assert_eq!(backend.count("set_session_auth s0 ada"), 1);
+}
+
+/// Accepts what `PasswordValidator` accepts and records the peer address of
+/// every LOGON it sees, accepted or not.
+struct RecordingValidator {
+    seen: Arc<Mutex<Vec<SocketAddr>>>,
+}
+
+#[async_trait::async_trait]
+impl AuthValidator for RecordingValidator {
+    async fn validate(
+        &self,
+        credentials: &AuthCredentials,
+        context: &AuthContext,
+    ) -> Result<AuthInfo, BoltError> {
+        self.seen.lock().unwrap().push(context.peer_addr);
+        PasswordValidator.validate(credentials, context).await
+    }
+}
+
+/// The validator learns where a LOGON comes from: the connection's peer
+/// address, for a LOGON that succeeds and for one that fails, so an audit
+/// log can record the source of a failed attempt.
+#[tokio::test]
+async fn the_validator_gets_the_peer_address() {
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let server = BoltServer::builder(MockBackend::default()).auth(RecordingValidator {
+        seen: Arc::clone(&seen),
+    });
+    tokio::spawn(async move { server.serve_listener(listener).await });
+
+    for (password, accepted) in [("secret", true), ("wrong", false)] {
+        let mut stream = TcpStream::connect(addr).await.unwrap();
+        let local = stream.local_addr().unwrap();
+        client_handshake(&mut stream, &default_client_proposals())
+            .await
+            .unwrap();
+        let mut client = RawClient::from_stream(stream);
+        client.send(&hello()).await;
+        client.success().await;
+        client.send(&logon_basic("ada", password)).await;
+        if accepted {
+            client.success().await;
+        } else {
+            assert_eq!(
+                client.failure().await,
+                "Neo.ClientError.Security.Unauthorized"
+            );
+        }
+        assert_eq!(
+            seen.lock().unwrap().last(),
+            Some(&local),
+            "password {password}: the validator saw the client's address"
+        );
+    }
+    assert_eq!(seen.lock().unwrap().len(), 2);
+}
+
+#[test]
+fn auth_context_new_sets_the_peer_address() {
+    let peer: SocketAddr = "192.0.2.7:51234".parse().unwrap();
+    assert_eq!(AuthContext::new(peer).peer_addr, peer);
 }
 
 /// Regression (authentication bypass): a failed LOGON left the connection
