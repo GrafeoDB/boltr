@@ -48,3 +48,7 @@ proptest = { version = "1", default-features = false, features = ["std"] }
 rcgen = { version = "0.14", default-features = false, features = ["aws_lc_rs", "pem"] }
 tokio = { version = "1.44.2", features = ["full"] }
 
+
+[lints.cargo]
+# Needs a build with all features to see every use (CI builds them all).
+unused_dependencies = "deny"
