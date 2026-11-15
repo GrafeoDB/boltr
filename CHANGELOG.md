@@ -2,6 +2,23 @@
 
 All notable changes to BoltR, a pure Rust implementation of the Bolt v5.x wire protocol (server framework and client).
 
+## [0.4.0] - 2026-11-15
+
+Audit and toolchain release: an `AuthValidator` learns the address a LOGON comes from, and BoltR needs Rust 1.100 or newer. Breaking for every `AuthValidator` implementation: `validate` takes a second argument, `&AuthContext` (ignore it with `_context` where it is not needed). Stay on 0.3.1 for an older Rust.
+
+### Added
+
+- **`AuthContext` tells the validator where a LOGON comes from**: `context.peer_addr` is the connection's TCP peer, for TCP, TLS and WebSocket alike and for a LOGON that fails as well as one that succeeds, so a server can log the source of a failed attempt. The struct is non-exhaustive; `AuthContext::new(peer_addr)` builds one, for example in a validator's tests.
+
+### Changed
+
+- **`AuthValidator::validate` takes the connection's `AuthContext`**: `validate(&self, credentials, context)` replaces `validate(&self, credentials)`.
+- **Rust 1.100 is the minimum** (was 1.91): `rust-version = "1.100.0"`, the same as grafeo, grafeo-server and gwp for their next releases.
+
+### Dependencies
+
+- **Semver-compatible updates**: rustls-pki-types 1.16.0, bumpalo 3.20.4, const-oid 0.10.3 and errno 0.3.15.
+
 ## [0.3.1] - 2026-11-14
 
 Latency release: a Bolt round trip no longer waits about 40 ms for a delayed ACK, and dependencies are updated. Nothing else changes, so every 0.3.0 user can upgrade in place.

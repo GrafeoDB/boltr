@@ -14,8 +14,10 @@ Thank you for your interest in contributing to BoltR! This document provides gui
 
 ### Prerequisites
 
-- Rust 1.85.0+ (edition 2024)
+- Rust 1.100.0+ (edition 2024)
 - `cargo` (comes with Rust)
+
+An unused dependency fails the build (`cargo::unused_dependencies`). Cargo ignores crate versions published in the last 3 days (`.cargo/config.toml`), so a just-released version needs a few days before `cargo update` takes it.
 
 ### Building
 
